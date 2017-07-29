@@ -1,0 +1,3 @@
+[submodule "SAXS"]
+	path = SAXS
+	url = git@github.com:spirit01/SAXS.git
