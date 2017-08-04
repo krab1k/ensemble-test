@@ -76,12 +76,15 @@ def print_parametrs_verbose(n_files, k_options, list_pdb_file):
 def ensamble_fit(k_options, n_files, selected_files_for_ensamble, data_for_experiment_modified):
     with tempfile.TemporaryDirectory(dir='.') as tmpdirname:
         print('created temporary directory', tmpdirname)
+        i = 1
         for f in selected_files_for_ensamble:
-            shutil.copy(f, tmpdirname)
-        #name = input("Enter your name: ")   # Python 3
-        curve_for_ensamble = make_curve_for_experiment(data_for_experiment_modified, k_options)
+            shutil.copy(f, tmpdirname + '/' + str(i).zfill(2) + '.pdb' )
+            i += 1
 
-        command = '/storage/brno3-cerit/home/krab1k/saxs-ensamble-fit/core/ensamble-fit -L -p {pdbdir} -n {n} -m {saxscurve}'.format(pdbdir=tmpdirname, n=n_files, saxscurve=curve_for_ensamble)
+        print('zkouska',tmpdirname[2:])
+        name = input("Enter your name: ")   # Python 3
+        curve_for_ensamble = make_curve_for_experiment(data_for_experiment_modified, k_options)
+        command = '/storage/brno3-cerit/home/krab1k/saxs-ensamble-fit/core/ensamble-fit -L -p {path}{pdbdir}/ -n {n} -m {saxscurve}'.format(path = os.getcwd(), pdbdir=tmpdirname[1:], n=n_files, saxscurve=curve_for_ensamble)
         print(command)
         subprocess.call(command,shell=True)
     return ()
@@ -94,13 +97,14 @@ def work_with_result_from_ensamble():
         # print (f.readline[2:4])
         for line in f:
             line = line.rstrip()
+            print(line)
             value_of_chi2 = line.split(',')[3]
             values_of_index_result = line.split(',')[4:]
             result_q_and_value.append((value_of_chi2, values_of_index_result))
 
-    # print(value_of_chi2)
-    # print(values_of_index_result)
-    print(result_q_and_value)
+    print('value chi',value_of_chi2)
+    print('index',values_of_index_result)
+    print('result_q_and_value',result_q_and_value)
 
     return result_q_and_value
 
@@ -111,7 +115,7 @@ def do_result(result, select_random_files_for_experiment, data_for_experiment, f
     if result == 0:
         tolerance = 0
     else:
-        tolerance = float(args.result)
+        tolerance = float(result)
         if tolerance > 1:
             print('Less then 1')
             sys.exit(0)
@@ -122,8 +126,8 @@ def do_result(result, select_random_files_for_experiment, data_for_experiment, f
 #    print("result_q_and_value :")
 #    print(result_q_and_value)
     for i, j in result_q_and_value:
-        print(len(select_random_files_for_experiment))
-        print(len(j))
+        print('pocet select',len(select_random_files_for_experiment))
+        print('delka j',len(j))
         if float(i) >= minimum:
             f.write('minimum a maximum:' + '\t' + str(minimum) + str(maximum) + '\n')
             for k in range(len(j)):
@@ -154,6 +158,7 @@ def make_curve_for_experiment(data_for_experiment_modified, k_options):
         run = True
         while run:
             sum_result = 0
+            q = 0
             i = 0
             for file in files:
                 line = file.readline()
@@ -162,10 +167,11 @@ def make_curve_for_experiment(data_for_experiment_modified, k_options):
                     break
                 if not line.startswith('#'):
                     sum_result += float(line.split(' ')[4]) * file_and_weight[i][1]
-
+                    q = float(line[:10])
+                    #print(q)
             if sum_result != 0:
                 # print(sum_result)
-                f.write(str(0) + '\t' + str(sum_result) + '\t' + str(0) + '\n')
+                f.write(str(q) + '\t' + str(sum_result) + '\t' + str(0) + '\n')
     for file in files:
         file.close()
     curve_for_ensamble = adderror("exp.dat", 'result.pdb.dat')
@@ -210,8 +216,8 @@ def main():
         filename = 'output_' + str(i) + str('_') + str(args.n_files)
         with open(filename, 'w') as f:
             select_random_files_for_experiment = random.sample(list_pdb_file, args.n_files)
-            data_for_experiment = random.sample(select_random_files_for_experiment,
-                                                 args.k_options)
+            print(select_random_files_for_experiment)
+            data_for_experiment = random.sample(select_random_files_for_experiment, args.k_options)
             f.write('N selected file' + str(select_random_files_for_experiment) + '\n')
             f.write('k options' + str(data_for_experiment) + '\n')
             data_for_experiment_modified = [None] * args.k_options
