@@ -25,23 +25,25 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 class RMSD_result:
-    def __init__(self, repeat = 0, selected_files = '', all_files = '', files_from_ensamble = '',
-                structure_and_rmsd = '', sum_rmsd = -100, files_and_weights = ''):
+    def __init__(self, repeat = 0, selected_files = '', all_files = '', data_and_weights = [],
+                structure_and_rmsd = '', sum_rmsd = '', assigment_files_and_weights = '', chi2 = [],
+                tolerance = 0):
                 self.repeat = repeat
                 self.selected_files = selected_files
                 self.all_files = all_files
-                self.files_from_ensamble = files_from_ensamble
+                self.data_and_weights = data_and_weights
                 self.structure_and_rmsd = structure_and_rmsd
                 self.sum_rmsd = sum_rmsd
-                self.files_and_weights = files_and_weights
+                self.assigment_files_and_weights = assigment_files_and_weights
+                self.chi2 = chi2
+                self.tolerance = tolerance
 
     def print_result(self):
         print('vysledek', self.repeat)
-
-
-
-
-
+        print('sum rmsd', self.sum_rmsd)
+        print('chi2', self.chi2)
+        print('result', self.data_and_weights)
+        print('zadani', self.assigment_files_and_weights)
 
 def get_argument():
     parser = ArgumentParser()
@@ -119,11 +121,11 @@ def print_parameters_verbose(args, list_pdb_file, all_files, selected_files, fil
     print('\n')
 
 
-def ensamble_fit(selected_files_for_ensamble, files_and_weights, tmpdirname):
+def ensamble_fit(selected_files_for_ensamble, files_and_weights, tmpdirname, c):
     print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdirname, '\n')
     for i, f in enumerate(selected_files_for_ensamble, start=1):
         shutil.copy(f, '{}/{:02d}.pdb.dat'.format(tmpdirname, i))
-    make_curve_for_experiment(files_and_weights, tmpdirname)
+    make_curve_for_experiment(files_and_weights, tmpdirname, c)
     command = '/storage/brno3-cerit/home/krab1k/saxs-ensamble-fit/core/ensamble-fit -L -p {dir}/ -n {n} -m {dir}/curve.modified.dat'.format(
         dir=tmpdirname, n=len(selected_files_for_ensamble))
     shutil.copy('../test/result', tmpdirname)
@@ -147,12 +149,16 @@ def work_with_result_from_ensamble(tmpdirname):
     return result_chi_and_weights
 
 
-def do_result(tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname):
-    results = []
+def do_result(tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname, c):
     minimum = min(result_chi_and_weights)[0]
     maximum = minimum * (1 + tolerance)
+    list_rmsd = []
+    c.tolerance = tolerance
     for chi2, weights in result_chi_and_weights:
+        results = []
+
         if chi2 <= maximum:
+            c.chi2.append(chi2)
             for i, weight in enumerate(weights):
                 if weight >= 0.001:
                     results.append((chi2, weight, all_files[i]))
@@ -160,11 +166,13 @@ def do_result(tolerance, all_files, selected_files, result_chi_and_weights, tmpd
             sum_rmsd = 0
             for k in results:
                 sum_rmsd += rmsd_pymol(selected_files[0], k[2], tmpdirname) * float(k[1])
+            c.data_and_weights.append(results)
+            print(Colors.OKBLUE + 'RMSD pymol' + Colors.ENDC, sum_rmsd, chi2, '\n')
+            list_rmsd.append(sum_rmsd)
+    c.sum_rmsd = list_rmsd
+    return(c)
 
-            print(Colors.OKBLUE + 'RMSD pymol' + Colors.ENDC, sum_rmsd, '\n')
-
-
-def make_curve_for_experiment(files_and_weights, tmpdirname):
+def make_curve_for_experiment(files_and_weights, tmpdirname, c):
     files = [filename for filename, weight in files_and_weights]
     print(Colors.OKBLUE+'Data for ensamble fit \n'+ Colors.ENDC)
     for data, weight in files_and_weights:
@@ -219,7 +227,9 @@ def final_statistic(args):
     print(Colors.HEADER + 'FINAL STATISTIC \n' + Colors.ENDC)
     print('Number of repetitions', args.repeat, '\n')
     print('THE BEST RMSD')
+    #TODO
     print('THE WORST RMSD')
+    #TODO
 
 
 def main():
@@ -239,20 +249,20 @@ def main():
         files_and_weights = list(zip(selected_files, weights))
         c.selected_files = selected_files
         c.all_files = all_files
-        c. files_and_weights = files_and_weights
+        c.assigment_files_and_weights = files_and_weights
         c.repeat = i+1
-        points.append(c)
 
         if args.verbose:
             print_parameters_verbose(args, list_pdb_file, all_files, selected_files, files_and_weights)
-        result_chi_and_weights = ensamble_fit(all_files, files_and_weights, tmpdirname)
+        result_chi_and_weights = ensamble_fit(all_files, files_and_weights, tmpdirname,c)
 
         if args.k_options == 1:
-            do_result(args.tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname)
+            c = do_result(args.tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname, c)
         else:
             print(Colors.WARNING +'not implemented \n' + Colors.ENDC)
         if not args.preserve:
             shutil.rmtree(tmpdirname)
+        points.append(c)
     for point in points:
         point.print_result()
     final_statistic(args)
