@@ -25,14 +25,12 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 class RMSD_result:
-    def __init__(self, all_files, selected_files, assigment_files_and_weights, run, tolerance):
+    def __init__(self, all_files, selected_files, assigment_files_and_weights, run):
                 self.selected_files = selected_files
                 self.all_files = all_files
                 self.assigment_files_and_weights = assigment_files_and_weights
                 self.run = run
-                self.tolerance = tolerance
                 self.data_and_weights = None
-                self.structure_and_rmsd = None
                 self.stats = None
 
     def print_result(self):
@@ -99,6 +97,7 @@ def test_argument(n_files, k_options, list_pdb_file, tolerance):
 def print_parameters_verbose(args, list_pdb_file, all_files, selected_files, files_and_weights):
     print(Colors.OKBLUE + 'Parameters \n' + Colors.ENDC)
     print('Working directory', os.getcwd(), '\n')
+    print('Tolerance', args.tolerance, '\n')
     print('Total number of available pdb files in the directory', len(list_pdb_file), '\n')
     print('Number of the all used files', args.n_files, '\n')
     print('List of the all used files \n')
@@ -146,7 +145,7 @@ def work_with_result_from_ensemble(tmpdirname):
     return result_chi_and_weights
 
 
-def do_result(tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname, result):
+def process_result(tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname, result):
     minimum = min(result_chi_and_weights)[0]
     maximum = minimum * (1 + tolerance)
     stats = []
@@ -246,7 +245,7 @@ def main():
         weights = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
         files_and_weights = list(zip(selected_files, weights))
 
-        result = RMSD_result(all_files, selected_files, files_and_weights, i + 1, args.tolerance)
+        result = RMSD_result(all_files, selected_files, files_and_weights, i + 1)
 
         if args.verbose:
             print_parameters_verbose(args, list_pdb_file, all_files, selected_files, files_and_weights)
@@ -254,7 +253,7 @@ def main():
         result_chi_and_weights = ensemble_fit(all_files, files_and_weights, tmpdirname, result)
 
         if args.k_options == 1:
-            do_result(args.tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname, result)
+            process_result(args.tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname, result)
         else:
             print(Colors.WARNING +'not implemented \n' + Colors.ENDC)
         if not args.preserve:
