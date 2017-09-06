@@ -30,8 +30,8 @@ class RMSD_result:
                 self.all_files = all_files
                 self.assigment_files_and_weights = assigment_files_and_weights
                 self.run = run
-                self.data_and_weights = None
-                self.stats = None
+                self.data_and_weights = []
+                self.stats = []
 
     def print_result(self):
         print(Colors.OKGREEN, 'Run:', self.run, Colors.ENDC)
@@ -39,6 +39,10 @@ class RMSD_result:
         print('Results:')
         for r, s in zip(self.data_and_weights, self.stats):
             print('RMSD: {:5.3f} chi2: {:5.3f} data: {}'.format(s[1],s[0], r))
+
+    def get_best_result(self):
+        return min(stat[1] for stat in self.stats)
+
 
 def get_argument():
     parser = ArgumentParser()
@@ -99,21 +103,12 @@ def print_parameters_verbose(args, list_pdb_file, all_files, selected_files, fil
     print('Working directory', os.getcwd(), '\n')
     print('Tolerance', args.tolerance, '\n')
     print('Total number of available pdb files in the directory', len(list_pdb_file), '\n')
-    print('Number of the all used files', args.n_files, '\n')
-    print('List of the all used files \n')
+    print('List of the all used files ({}):\n'.format(len(all_files)))
     for i in range(len(all_files)):
         if (i + 1) % 7 == 0:
             print(all_files[i])
         else:
             print(all_files[i], '\t', end='')
-    print('\n')
-    print('Number of selected files', args.k_options, '\n')
-    print('List of selected files \n')
-    for i in range(len(selected_files)):
-        if (i + 1) % 7 == 0:
-            print(selected_files[i])
-        else:
-            print(selected_files[i], '\t', end='')
     print('\n')
 
 
@@ -221,16 +216,17 @@ def rmsd_pymol(structure_1, structure_2, tmpdirname):
 
     return rmsd
 
-def final_statistic(args):
+def final_statistic(args, all_results):
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
-    print('Number of runs', args.repeat, '\n')
-    print('THE BEST RMSD')
-    #TODO
-    print('THE WORST RMSD')
-    #TODO
 
+    rmsd = [result.get_best_result() for result in all_results]
+    print('RMSD = ', np.mean(rmsd),'±' ,np.std(rmsd))
+    print('Number of runs', args.repeat, '\n')
 
 def main():
+    random.seed(1)
+    np.random.seed(1)
+
     all_results = []
     args = get_argument()
     os.chdir(args.mydirvariable)
@@ -255,15 +251,13 @@ def main():
         if args.k_options == 1:
             process_result(args.tolerance, all_files, selected_files, result_chi_and_weights, tmpdirname, result)
         else:
-            print(Colors.WARNING +'not implemented \n' + Colors.ENDC)
+            print(Colors.WARNING +'k > 1 not implemented.\n' + Colors.ENDC)
         if not args.preserve:
             shutil.rmtree(tmpdirname)
         all_results.append(result)
     for result in all_results:
         result.print_result()
-    final_statistic(args)
-
-
+    final_statistic(args, all_results)
 
 
 if __name__ == '__main__':
