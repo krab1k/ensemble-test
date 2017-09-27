@@ -40,24 +40,22 @@ def jensen_shannon_divergence(kernel1, kernel2, grid):
 
 def load_weights(filename):
     try:
-        weights = []
         with open(filename) as f:
-            weights.extend(float(v) for v in f.readline().split())
-            weights.extend(float(v) for v in f.readline().split())
+            weights = [float(v) for v in (f.readline() + f.readline()).split()]
             return weights
     except IOError:
         print(f'Cannot open file with weights {filename}', file=sys.stderr)
         sys.exit(1)
 
 
-def adjust_data_by_weights(data, weights):
+def adjust_data_by_weights(data, weights, size1):
     tmp = []
-    for d, w in zip(data.T, weights):
-        print(d.shape, d)
-        tile = np.tile(d.reshape((d.shape[0], 1)), int(w * 10))
+    for d, w in zip(data, weights):
+        tile = np.tile(d, (int(w * 100), 1))
         tmp.append(tile)
 
-    return np.hstack(tmp)
+    res = np.vstack(tmp)
+    return res, sum(int(w * 100) for w in weights[:size1]), sum(int(w * 100) for w in weights[size1:])
 
 
 def main():
@@ -71,7 +69,7 @@ def main():
 
     if args.weights:
         weights = load_weights(args.weights)
-
+        print(weights)
 
     pdb_parser = Bio.PDB.PDBParser(QUIET=True)
     ensemble1 = pdb_parser.get_structure('en1', args.ensemble1)
@@ -87,9 +85,8 @@ def main():
     np.random.seed(0)
     transformed = isomap.fit_transform(data)
 
-    #if args.weights:
-    weights = list(v / 100 for v in range(ensemble1_size + ensemble2_size))
-    adjust_data_by_weights(transformed, weights)
+    if args.weights:
+        transformed, ensemble1_size, ensemble2_size = adjust_data_by_weights(transformed, weights, ensemble1_size)
 
     if args.dims == 1:
         ensemble1_data = transformed[:ensemble1_size].T[0]
@@ -111,6 +108,7 @@ def main():
     else:
         ensemble1_data = transformed[:ensemble1_size, :].T
         ensemble2_data = transformed[ensemble1_size:, :].T
+
         kernel1 = gaussian_kde(ensemble1_data)
         kernel2 = gaussian_kde(ensemble2_data)
 
