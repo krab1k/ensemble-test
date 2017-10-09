@@ -4,34 +4,34 @@ import argparse
 import itertools
 import sys
 from sklearn import manifold, decomposition
-from scipy.stats import gaussian_kde
+from scipy.stats import gaussian_kde, entropy
 import matplotlib.pyplot as plt
 
 import simplex
 
 
+def get_distance(coords1, coords2):
+    superimposer = Bio.PDB.Superimposer()
+    superimposer.set_atoms(coords1, coords2)
+    return superimposer.rms
+
+
 def get_distance_matrix(ensemble1, ensemble2):
-    all_structures = list(ensemble1) + list(ensemble2)
-    n = len(all_structures)
+    all_atoms = [list(structure.get_atoms()) for structure in itertools.chain(ensemble1, ensemble2)]
+    n = len(all_atoms)
+
     distance_matrix = np.zeros((n, n), dtype=np.float_)
     for i, j in itertools.combinations(range(n), 2):
-        superimposer = Bio.PDB.Superimposer()
-        superimposer.set_atoms(list(all_structures[i].get_atoms()), list(all_structures[j].get_atoms()))
-        distance = superimposer.rms
-        distance_matrix[i, j] = distance_matrix[j, i] = distance
+        distance_matrix[i, j] = distance_matrix[j, i] = get_distance(all_atoms[i], all_atoms[j])
 
     return distance_matrix
 
 
-def kullback_leibler_divergence(p_x, p_y):
-    return np.average(p_x * np.log(p_x / p_y))
-
-
-def jensen_shannon_divergence(kernel1, kernel2, grid):
+def jensen_shannon_distance(kernel1, kernel2, grid):
     p_x = kernel1(grid)
     p_y = kernel2(grid)
     m = 0.5 * (p_x + p_y)
-    return 0.5 * (kullback_leibler_divergence(p_x, m) + kullback_leibler_divergence(p_y, m))
+    return (0.5 * (entropy(p_x, m) + entropy(p_y, m))) ** 0.5
 
 
 def load_weights(filename):
@@ -63,7 +63,7 @@ def plot_1d(kernel1, kernel2, data1, data2, grid):
     plt.show()
 
 
-def plot_2d(kernel1, kernel2, data1, data2, grid):
+def plot_2d(kernel1, kernel2, data1, data2, grid, xx, xmin, xmax, ymin, ymax):
     res1 = kernel1.evaluate(grid)
     res2 = kernel2.evaluate(grid)
 
@@ -90,6 +90,7 @@ def main():
     parser.add_argument('-w', '--weights', type=str)
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('-p', '--plot', action='store_true')
+    parser.add_argument('--distance-matrix', type=str)
 
     args = parser.parse_args()
 
@@ -107,8 +108,17 @@ def main():
     if args.verbose:
         print(f'Loaded ensemble 1 ({ensemble1_size} models), ensemble 2 ({ensemble2_size} models)')
 
-    distance_matrix = get_distance_matrix(ensemble1, ensemble2)
-    np.set_printoptions(suppress=True)
+    if args.distance_matrix:
+        try:
+            with open(args.distance_matrix, 'rb') as f:
+                distance_matrix = np.load(f)
+            print('Loaded distance matrix')
+        except IOError:
+            distance_matrix = get_distance_matrix(ensemble1, ensemble2)
+            with open(args.distance_matrix, 'wb') as f:
+                np.save(f, distance_matrix)
+    else:
+        distance_matrix = get_distance_matrix(ensemble1, ensemble2)
 
     if not simplex.check_triangle_inequality(distance_matrix):
         print('Triangle inequality doesn\'t hold for the distance matrix, something bad had happed.', file=sys.stderr)
@@ -129,7 +139,6 @@ def main():
             print(f'ensemble 2: {weights[ensemble1_size:]}')
         transformed, ensemble1_size, ensemble2_size = adjust_data_by_weights(transformed, weights, ensemble1_size)
 
-    print(transformed)
     if args.dims == 1:
         ensemble1_data = transformed[:ensemble1_size].T[0]
         ensemble2_data = transformed[ensemble1_size:].T[0]
@@ -138,7 +147,13 @@ def main():
         kernel2 = gaussian_kde(ensemble2_data)
 
         xmin, xmax = np.min(transformed), np.max(transformed)
-        grid = np.linspace(xmin, xmax, 100)
+        size = xmax - xmin
+
+        while kernel1.integrate_box(xmin, xmax) < 0.99 or kernel2.integrate_box(xmin, xmax) < 0.99:
+            xmin -= 0.1 * size
+            xmax += 0.1 * size
+
+        grid = np.linspace(xmin, xmax, 500)
 
         if args.plot:
             plot_1d(kernel1, kernel2, ensemble1_data, ensemble2_data, grid)
@@ -146,18 +161,35 @@ def main():
         ensemble1_data = transformed[:ensemble1_size, :].T
         ensemble2_data = transformed[ensemble1_size:, :].T
 
-        kernel1 = gaussian_kde(ensemble1_data)
-        kernel2 = gaussian_kde(ensemble2_data)
+        try:
+            kernel1 = gaussian_kde(ensemble1_data)
+            kernel2 = gaussian_kde(ensemble2_data)
+        except np.linalg.LinAlgError:
+            print('Cannot create a kernel, try lower dimension (-d 1)', file=sys.stderr)
+            sys.exit(1)
 
         xmin, ymin = np.min(transformed, 0)
         xmax, ymax = np.max(transformed, 0)
-        xx, yy = np.mgrid[xmin:xmax:200j, ymin:ymax:200j]
+
+        xsize = xmax - xmin
+        ysize = ymax - ymin
+
+        while kernel1.integrate_box([xmin, ymin], [xmax, ymax]) < 0.99 or kernel2.integrate_box([xmin, ymin], [xmax, ymax]) < 0.99:
+            xmin -= 0.1 * xsize
+            ymin -= 0.1 * ysize
+            xmax += 0.1 * xsize
+            ymax += 0.1 * ysize
+
+        print('kernel1', kernel1.integrate_box([xmin, ymin], [xmax, ymax]))
+        print('kernel2', kernel2.integrate_box([xmin, ymin], [xmax, ymax]))
+
+        xx, yy = np.mgrid[xmin:xmax:500j, ymin:ymax:500j]
         grid = np.vstack([xx.ravel(), yy.ravel()])
 
         if args.plot:
-            plot_2d(kernel1, kernel2, ensemble1_data, ensemble2_data, grid)
+            plot_2d(kernel1, kernel2, ensemble1_data, ensemble2_data, grid, xx, xmin, xmax, ymin, ymax)
 
-    print('Final divergence = {:f}'.format(jensen_shannon_divergence(kernel1, kernel2, grid)))
+    print('Final distance = {:f}'.format(jensen_shannon_distance(kernel1, kernel2, grid)))
 
 
 if __name__ == '__main__':
