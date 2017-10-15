@@ -9,7 +9,6 @@ import sys
 import tempfile
 from argparse import ArgumentParser
 from os import listdir
-
 import numpy as np
 import fortranformat as ff
 from adderror import adderror
@@ -24,8 +23,9 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-class RMSD_result:
-    def __init__(self, all_files, selected_files, assigment_files_and_weights, run, method):
+
+class ResultRMSD:
+    def __init__(self, all_files, selected_files, assigment_files_and_weights, run):
         self.selected_files = selected_files
         self.all_files = all_files
         self.assigment_files_and_weights = assigment_files_and_weights
@@ -115,7 +115,6 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
             print(all_files[i], '\t', end='')
     print('\n')
 
-
 def make_curve_for_experiment(files_and_weights, tmpdirname):
     files = [filename for filename, weight in files_and_weights]
     print(Colors.OKBLUE + 'Data for ensamble fit \n' + Colors.ENDC)
@@ -148,8 +147,8 @@ def ensemble_fit(all_files, tmpdirname):
     print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdirname, '\n')
     for i, f in enumerate(all_files, start=1):
         shutil.copy(f, '{}/{:02d}.pdb.dat'.format(tmpdirname, i))
-    command = '/storage/brno3-cerit/home/krab1k/saxs-ensamble-fit/core/ensamble-fit -L -p {dir}/ -n {n} -m {dir}/curve.modified.dat'.format(
-        dir=tmpdirname, n=len(all_files))
+    ensemble_fit_binary = '/storage/brno3-cerit/home/krab1k/saxs-ensamble-fit/core/ensamble-fit'
+    command = f'{ensemble_fit_binary} -L -p {tmpdir}/ -n {len(selected_files)} -m {tmpdir}/curve.modified.dat'
     shutil.copy('../test/result', tmpdirname)
     print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
     # subprocess.call(command, shell=True)
@@ -370,7 +369,7 @@ def main():
             # else:    print('Not implemented now.')
             # sys.exit(1)
         if args.method == 'foxs':
-            result = RMSD_result(all_files, selected_files, files_and_weights, i + 1, args.method)
+            result =  ResultRMSD(all_files, selected_files, files_and_weights, i + 1, args.method)
             multifox(all_files, tmpdirname)
             result_chi_and_weights_multifox = work_with_result_from_multifox(tmpdirname)
             process_result_multifox(args.tolerance, tmpdirname, result_chi_and_weights_multifox,
