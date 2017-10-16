@@ -25,7 +25,7 @@ class Colors:
 
 
 class ResultRMSD:
-    def __init__(self, all_files, selected_files, assigment_files_and_weights, run):
+    def __init__(self, all_files, selected_files, assigment_files_and_weights, run, method):
         self.selected_files = selected_files
         self.all_files = all_files
         self.assigment_files_and_weights = assigment_files_and_weights
@@ -115,7 +115,7 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
             print(all_files[i], '\t', end='')
     print('\n')
 
-def make_curve_for_experiment(files_and_weights, tmpdirname):
+def make_curve_for_experiment(files_and_weights, tmpdir):
     files = [filename for filename, weight in files_and_weights]
     print(Colors.OKBLUE + 'Data for ensamble fit \n' + Colors.ENDC)
     for data, weight in files_and_weights:
@@ -136,38 +136,38 @@ def make_curve_for_experiment(files_and_weights, tmpdirname):
     for filename, weight in files_and_weights:
         result_curve += curves[filename] * weight
 
-    with open(tmpdirname + '/curve', 'w') as file:
+    with open(tmpdir + '/curve', 'w') as file:
         for q, y in zip(qs, result_curve):
             file.write('{:5.3f} {} 0\n'.format(q, y))
 
-    adderror("../data/exp.dat", tmpdirname + '/curve')
+    adderror("../data/exp.dat", tmpdir + '/curve')
 
 
-def ensemble_fit(all_files, tmpdirname):
-    print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdirname, '\n')
+def ensemble_fit(all_files, tmpdir):
+    print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
     for i, f in enumerate(all_files, start=1):
-        shutil.copy(f, '{}/{:02d}.pdb.dat'.format(tmpdirname, i))
+        shutil.copy(f, '{}/{:02d}.pdb.dat'.format(tmpdir, i))
     ensemble_fit_binary = '/storage/brno3-cerit/home/krab1k/saxs-ensamble-fit/core/ensamble-fit'
-    command = f'{ensemble_fit_binary} -L -p {tmpdir}/ -n {len(selected_files)} -m {tmpdir}/curve.modified.dat'
-    shutil.copy('../test/result', tmpdirname)
+    command = f'{ensemble_fit_binary} -L -p {tmpdir}/ -n {len(all_files)} -m {tmpdir}/curve.modified.dat'
+    shutil.copy('../test/result', tmpdir)
     print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
     # subprocess.call(command, shell=True)
-    return work_with_result_from_ensemble(tmpdirname)
+    return work_with_result_from_ensemble(tmpdir)
 
-def multifox(all_files, tmpdirname):
-    print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdirname, '\n')
+def multifox(all_files, tmpdir):
+    print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
     for file in all_files:
-        shutil.copy(file, '{}'.format(tmpdirname))
+        shutil.copy(file, '{}'.format(tmpdir))
     files_for_multifox = ' '.join(str(e) for e in all_files)
-    command = 'multi_foxs curve.modified.dat {pdb}'.format(dir=tmpdirname, pdb=files_for_multifox)
-    subprocess.check_call(command, cwd=tmpdirname, shell=True)
+    command = 'multi_foxs curve.modified.dat {pdb}'.format(dir=tmpdir, pdb=files_for_multifox)
+    subprocess.check_call(command, cwd=tmpdir, shell=True)
 
 
-def gajoe(all_files, tmpdirname):
-    with open(tmpdirname + '/curve_gajoe.dat', 'w') as file_gajoe:
+def gajoe(all_files, tmpdir):
+    with open(tmpdir + '/curve_gajoe.dat', 'w') as file_gajoe:
         file_gajoe.write(' Angular axis m01000.sax             Datafile m21000.sub         21-Jun-2001\n')
         lineformat = ff.FortranRecordWriter('(1E12.6)')
-        with open(tmpdirname + '/curve.modified.dat') as file1:
+        with open(tmpdir + '/curve.modified.dat') as file1:
             for line in file1:
                 data1 = float(line.split()[0])
                 data2 = float(line.split()[1])
@@ -177,8 +177,8 @@ def gajoe(all_files, tmpdirname):
                 b = lineformat.write([data2])
                 c = lineformat.write([data3])
                 file_gajoe.write(' {} {} {}\n'.format(x, b, c))
-    print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdirname, '\n')
-    with open(tmpdirname + '/juneom.eom', 'w') as file1:
+    print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
+    with open(tmpdir + '/juneom.eom', 'w') as file1:
         file1.write('    S values    51 \n')
         with open(all_files[0] + ".dat") as file2:
             for line in file2:
@@ -198,15 +198,15 @@ def gajoe(all_files, tmpdirname):
                     lineformat = ff.FortranRecordWriter('(1E14.6)')
                     b = lineformat.write([data1])
                     file1.write('{}\n'.format(b))
-    command = 'gajoe curve.modified.dat -i=juneom.eom -t=5'.format(dir=tmpdirname)
+    command = 'gajoe curve_gajoe.dat -i=juneom.eom -t=5'.format()
     print(command)
-    # subprocess.check_call(command, cwd=tmpdirname, shell=True)
+    # subprocess.check_call(command, cwd=tmpdir, shell=True)
     return ()
 
 
-def work_with_result_from_ensemble(tmpdirname):
+def work_with_result_from_ensemble(tmpdir):
     result_chi_and_weights_ensemble = []
-    with open(tmpdirname + '/result', 'r') as f:
+    with open(tmpdir + '/result', 'r') as f:
         next(f)
 
         for line in f:
@@ -218,9 +218,9 @@ def work_with_result_from_ensemble(tmpdirname):
     return result_chi_and_weights_ensemble
 
 
-def work_with_result_from_multifox(tmpdirname):
+def work_with_result_from_multifox(tmpdir):
     multifoxs_files = []
-    files = listdir(tmpdirname)
+    files = listdir(tmpdir)
     for line in files:
         line = line.rstrip()
         if re.search('\d.txt$', line):
@@ -245,7 +245,7 @@ def work_with_result_from_multifox(tmpdirname):
     return result
 
 
-def process_result_multifox(tolerance, tmpdirname,
+def process_result_multifox(tolerance, tmpdir,
                             result_chi_and_weights_multifox, k_options,
                             selected_files, result):
     minimum = min(result_chi_and_weights_multifox)  # map(min, zip(*result_chi_and_weights_multifox))
@@ -261,7 +261,7 @@ def process_result_multifox(tolerance, tmpdirname,
             sum_rmsd = 0
             if k_options == 1:
                 for weight1, structure1 in multifox_results:
-                    sum_rmsd = + rmsd_pymol(selected_files[0], structure1, tmpdirname) * float(weight1)
+                    sum_rmsd = + rmsd_pymol(selected_files[0], structure1, tmpdir) * float(weight1)
 
                 print(Colors.OKBLUE + ' \nRMSD pymol' + Colors.ENDC, sum_rmsd, '\n')
                 stats.append((chi2, sum_rmsd))
@@ -277,7 +277,7 @@ def process_result_multifox(tolerance, tmpdirname,
     result.data_and_weights = all_results
 
 
-def process_result_ensemble(tolerance, all_files, selected_files, result_chi_and_weights_ensemble, tmpdirname, result):
+def process_result_ensemble(tolerance, all_files, selected_files, result_chi_and_weights_ensemble, tmpdir, result):
     minimum = min(result_chi_and_weights_ensemble)[0]
     maximum = minimum * (1 + tolerance)
     stats = []
@@ -291,7 +291,7 @@ def process_result_ensemble(tolerance, all_files, selected_files, result_chi_and
 
             sum_rmsd = 0
             for r in ensemble_results:
-                sum_rmsd += rmsd_pymol(selected_files[0], r[1], tmpdirname) * float(r[0])
+                sum_rmsd += rmsd_pymol(selected_files[0], r[1], tmpdir) * float(r[0])
 
             print(Colors.OKBLUE + 'RMSD pymol' + Colors.ENDC, sum_rmsd, '\n')
             stats.append((chi2, sum_rmsd))
@@ -301,13 +301,13 @@ def process_result_ensemble(tolerance, all_files, selected_files, result_chi_and
     result.data_and_weights = all_results
 
 
-def rmsd_pymol(structure_1, structure_2, tmpdirname):
-    shutil.copy(structure_1, tmpdirname)
-    shutil.copy(structure_2, tmpdirname)
+def rmsd_pymol(structure_1, structure_2, tmpdir):
+    shutil.copy(structure_1, tmpdir)
+    shutil.copy(structure_2, tmpdir)
     if structure_1 == structure_2:
         rmsd = 0
     else:
-        with open(tmpdirname + '/file_for_pymol.pml', 'w') as file_for_pymol:
+        with open(tmpdir + '/file_for_pymol.pml', 'w') as file_for_pymol:
             file_for_pymol.write("""
             load  {s1}
             load  {s2}
@@ -317,7 +317,7 @@ def rmsd_pymol(structure_1, structure_2, tmpdirname):
                        s3=os.path.splitext(structure_1)[0],
                        s4=os.path.splitext(structure_2)[0]))
         # out_pymol = subprocess.check_output("module add pymol-1.8.2.1-gcc; pymol -c file_for_pymol.pml | grep Executive:; module rm pymol-1.8.2.1-gcc", shell=True)
-        command = ' pymol -c {dir}/file_for_pymol.pml | grep Executive:'.format(dir=tmpdirname)
+        command = ' pymol -c {dir}/file_for_pymol.pml | grep Executive:'.format(dir=tmpdir)
         out_pymol = subprocess.check_output(command, shell=True)
         rmsd = float(out_pymol[out_pymol.index(b'=') + 1:out_pymol.index(b'(') - 1])
     print('RMSD ', structure_1, ' and ', structure_2, ' = ', rmsd)
@@ -341,41 +341,41 @@ def main():
     test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
 
     for i in range(args.repeat):
-        tmpdirname = tempfile.mkdtemp()
+        tmpdir = tempfile.mkdtemp()
         print(Colors.OKGREEN + 'RUN {}/{}'.format(i + 1, args.repeat) + Colors.ENDC, '\n')
         all_files = random.sample(list_pdb_file, args.n_files)
         selected_files = random.sample(all_files, args.k_options)
         weights = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
         files_and_weights = list(zip(selected_files, weights))
-        make_curve_for_experiment(files_and_weights, tmpdirname)
+        make_curve_for_experiment(files_and_weights, tmpdir)
         print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
         print(args.method, '\n')
         if args.verbose:
             print_parameters_verbose(args, list_pdb_file, all_files)
         if args.method == 'ensemble':
-            result = RMSD_result(all_files, selected_files, files_and_weights, i + 1, args.method)
-            result_chi_and_weights_ensemble = ensemble_fit(all_files, tmpdirname)
+            result = ResultRMSD(all_files, selected_files, files_and_weights, i + 1, args.method)
+            result_chi_and_weights_ensemble = ensemble_fit(all_files, tmpdir)
             if args.k_options == 1:
                 process_result_ensemble(args.tolerance, all_files, selected_files, result_chi_and_weights_ensemble,
-                                        tmpdirname, result)
+                                        tmpdir, result)
             else:
                 print(Colors.WARNING + 'k > 1 not implemented.\n' + Colors.ENDC)
             if not args.preserve:
-                shutil.rmtree(tmpdirname)
+                shutil.rmtree(tmpdir)
             all_results.append(result)
         if args.method == 'eom':
             # if args.k_options == 1:
-            gajoe(selected_files, tmpdirname)
+            gajoe(selected_files, tmpdir)
             # else:    print('Not implemented now.')
             # sys.exit(1)
         if args.method == 'foxs':
             result =  ResultRMSD(all_files, selected_files, files_and_weights, i + 1, args.method)
-            multifox(all_files, tmpdirname)
-            result_chi_and_weights_multifox = work_with_result_from_multifox(tmpdirname)
-            process_result_multifox(args.tolerance, tmpdirname, result_chi_and_weights_multifox,
+            multifox(all_files, tmpdir)
+            result_chi_and_weights_multifox = work_with_result_from_multifox(tmpdir)
+            process_result_multifox(args.tolerance, tmpdir, result_chi_and_weights_multifox,
                                     args.k_options, selected_files, result)
             if not args.preserve:
-                shutil.rmtree(tmpdirname)
+                shutil.rmtree(tmpdir)
             all_results.append(result)
 
             # print('Not implemented now.')
