@@ -15,8 +15,8 @@ from adderror import adderror
 import pathlib
 import Bio.PDB
 
-
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensamble-fit'
+
 
 class Colors:
     HEADER = '\033[95m'
@@ -44,7 +44,7 @@ class ResultRMSD:
         print('Selected:', self.assigment_files_and_weights)
         print('Results:\n')
         for r, s in zip(self.data_and_weights, self.stats):
-            print('RMSD: {:5.3f} chi2: {:5.3f} data: {}'.format(s[1], s[0], r))
+            print(f'RMSD: {s[1]:5.3f} chi2: {s[0]:5.3f} data: {r}')
 
     def get_best_result(self):
         return min(stat[1] for stat in self.stats)
@@ -112,7 +112,7 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
     print('Working directory', os.getcwd(), '\n')
     print('Tolerance', args.tolerance, '\n')
     print('Total number of available pdb files in the directory', len(list_pdb_file), '\n')
-    print('List of the all used files ({}):\n'.format(len(all_files)))
+    print(f'List of the all used files ({len(all_files)}):\n')
     for i in range(len(all_files)):
         if (i + 1) % 7 == 0:
             print(all_files[i])
@@ -123,6 +123,9 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
 
 def prepare_directory(all_files, selected_files, tmpdir, method):
     pathlib.Path(tmpdir + '/pdbs').mkdir(parents=True, exist_ok=True)
+    if method == 'ensemble':
+        pathlib.Path(tmpdir + '/pdbs/ensembles').mkdir(parents=True, exist_ok=True)
+
     pathlib.Path(tmpdir + '/dats').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/method').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
@@ -133,14 +136,14 @@ def prepare_directory(all_files, selected_files, tmpdir, method):
         if return_value:
             print(f'ERROR: Foxs failed.', file=sys.stderr)
             sys.exit(1)
-        shutil.copy(file + '.dat', '{}/dats/'.format(tmpdir))
+        shutil.copy(file + '.dat', f'{tmpdir}/dats/')
 
-    if method == ('ensemble'): # format 01.pdb, 02.pdb asi input for ensemble
+    if method == 'ensemble':  # format 01.pdb, 02.pdb as input for ensemble
         for i, f in enumerate(all_files, start=1):
-            shutil.copy(f, '{}/pdbs/{:02d}.pdb'.format(tmpdir, i))
-    else:
-        for file in all_files: # not strict format
-            shutil.copy(file, '{}/pdbs/'.format(tmpdir))
+            shutil.copy(f, f'{tmpdir}/pdbs/ensembles/{i:02d}.pdb')
+
+    for file in all_files:  # not strict format for pdbs file
+        shutil.copy(file, f'{tmpdir}/pdbs/')
 
 
 def make_curve_for_experiment(files_and_weights, tmpdir):
@@ -166,14 +169,14 @@ def make_curve_for_experiment(files_and_weights, tmpdir):
 
     with open(tmpdir + '/method/curve', 'w') as file:
         for q, y in zip(qs, result_curve):
-            file.write('{:5.3f} {} 0\n'.format(q, y))
+            file.write(f'{q:5.3f} {y} 0\n')
 
     adderror("../data/exp.dat", tmpdir + '/method/curve')
 
 
 def ensemble_fit(all_files, tmpdir):
     # RUN ensemble
-    command = f'{ENSEMBLE_BINARY} -L -p {tmpdir}/pdbs/ -n {len(all_files)} -m {tmpdir}/method/curve.modified.dat'
+    command = f'{ENSEMBLE_BINARY} -L -p {tmpdir}/pdbs/ensembles/ -n {len(all_files)} -m {tmpdir}/method/curve.modified.dat'
     shutil.copy('../test/result', tmpdir)
     print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
     # return_value = subprocess.call(command, shell=True)
@@ -195,15 +198,16 @@ def ensemble_fit(all_files, tmpdir):
             values_of_index_result = [float(value) for value in line.split(',')[4:]]
             result_chi_and_weights_ensemble.append((value_of_chi2, values_of_index_result))
     ensemble_results = []
-    structure= []
+    structure = []
     for chi2, weights in result_chi_and_weights_ensemble:
         for i, weight in enumerate(weights):
             if weight >= 0.001:
                 structure.append((all_files[i], weight))
-        ensemble_results.append(((chi2,structure)))
+        ensemble_results.append((chi2, structure))
     return ensemble_results
 
     # ((chi2, [('mod10.pdb', 0.3), ('mod15.pdb', 0.7)]),(chi2(strucutre, weight),(strucutre, weight)))
+
 
 def multifox(all_files, tmpdir):
     # RUN Multi_foxs
@@ -223,7 +227,6 @@ def multifox(all_files, tmpdir):
             multifoxs_files.append(line)
     result = []
     chi2 = 0
-    weight_structure = []
     for filename in multifoxs_files:
         with open(tmpdir + '/' + filename) as file:
             weight_structure = []
@@ -232,7 +235,7 @@ def multifox(all_files, tmpdir):
                 #    0   | 1.000 (1.000, 1.000) | /tmp/tmpnz7dbids/pdbs/mod13.pdb  (0.062)
                 if not line.startswith(' '):
                     if weight_structure != []:
-                        result.append(((chi2, weight_structure)))
+                        result.append((chi2, weight_structure))
                         print(line)
                     chi2 = float(line.split('|')[1])
                     weight_structure = []
@@ -240,12 +243,10 @@ def multifox(all_files, tmpdir):
                 else:
                     weight = line[line.index('|') + 1:line.index('(')]
                     structure = line.split('pdbs/')[1].split('(')[0].strip()
-                    weight_structure.append((structure,weight))
+                    weight_structure.append((structure, weight))
                     print(chi2, weight_structure)
-            result.append(((chi2, weight_structure)))
-    print(result)
-    # ((chi2, [('mod10.pdb', 0.3), ('mod15.pdb', 0.7)]),(chi2, [(strucutre, weight),(strucutre, weight))])
-
+            result.append((chi2, weight_structure))
+    # ((chi2, [('mod10.pdb', 0.3), ('mod15.pdb', 0.7)]),(chi2, [(strucutre, weight),(strucutre, weight),...)])
     return result
 
 
@@ -266,17 +267,16 @@ def gajoe(all_files, tmpdir):
                 x = a[1:]
                 b = lineformat.write([data2])
                 c = lineformat.write([data3])
-                file_gajoe.write(' {} {} {}\n'.format(x, b, c))
+                file_gajoe.write(f' {x} {b} {c}\n')
     # S values    num_lines
     # 0.000000E+00
     # ------
     #  Curve no.     1
     # 0.309279E+08
-
     num_lines = sum(1 for line in open(all_files[0] + ".dat")) - 2
     print(num_lines)
     with open(tmpdir + '/method/juneom.eom', 'w') as file1:
-        file1.write('    S values   {} \n'.format(num_lines))
+        file1.write(f'    S values   {num_lines} \n')
         with open(all_files[0] + ".dat") as file2:
             for line in file2:
                 if line.startswith('#'):
@@ -284,10 +284,10 @@ def gajoe(all_files, tmpdir):
                 data = float(line.split()[0])
                 lineformat = ff.FortranRecordWriter('(1E14.6)')
                 b = lineformat.write([data])
-                file1.write('{}\n'.format(b))
+                file1.write(f'{b}\n')
         for i, filename in enumerate(all_files, start=1):
             with open(filename + ".dat") as file2:
-                file1.write('Curve no.     {} \n'.format(i))
+                file1.write(f'Curve no.     {i} \n')
                 for line in file2:
                     if line.startswith('#'):
                         continue
@@ -295,7 +295,7 @@ def gajoe(all_files, tmpdir):
                     lineformat = ff.FortranRecordWriter('(1E14.6)')
                     b = lineformat.write([data1])
                     file1.write(f'{b}\n')
-    command = 'yes | gajoe ./method/curve_gajoe.dat -i=./method/juneom.eom -t=5'.format()
+    command = f'yes | gajoe ./method/curve_gajoe.dat -i=./method/juneom.eom -t=5'
     print(command)
     return_value = subprocess.check_call(command, cwd=tmpdir, shell=True)
     if return_value:
@@ -303,44 +303,38 @@ def gajoe(all_files, tmpdir):
         sys.exit(1)
     # process results from gajoe (/GAOO1/curve_1/
     chi2 = None
-    number = []
     weight = []
     order_of_curve = []
+    reg = f'^\s*\d+\)'
+    m = re.compile('^\s*\d+\)')
     with open(tmpdir + '/GA001/curve_1/logFile_001_1.log') as file_gajoe:
         for line in file_gajoe:
             if '-- Chi^2 : ' in line:
                 chi2 = float(line.split(':')[1])
-    # curve                   weight
-    # 00002ethod/juneom.pd ~0.253.00
-    # 00003ethod/juneom.pd ~0.172.00
-            if ') 0' in line:
-                    order_of_curve.append(int(line.split()[1][:5])-1) # number of curves in logfile > 1!!!
-                    weight.append(float(line.split()[4][1:6]))
+                # curve                   weight
+                # 00002ethod/juneom.pd ~0.253.00
+                # 00003ethod/juneom.pd ~0.172.00
+            p = m.search(line)
+            if p != None:
+                order_of_curve.append(int(line.split()[1][:5]) - 1)  # number of curves in logfile > 1!!!
+                weight.append(float(line.split()[4][1:6]))
 
-
-    # '^\s*\d+\)'
-    #print(order_of_curve)
-    order_weight = list(zip(order_of_curve, weight))
-    result_chi_structure_weights_repeat = []
-    #print(order_weight)
-    #print(all_files)
+    result_chi_structure_weights = []
     structure_weight = []
     for i, file in enumerate(all_files):
         if i in order_of_curve:
-                structure_weight.append((all_files[i],  weight[order_of_curve.index(i)]))
-    result_chi_structure_weights_repeat.append((chi2, structure_weight))
-    print(result_chi_structure_weights_repeat)
-    # [(1.255, 'mod06.pdb', 0.102, 1), (1.255, 'mod01.pdb', 0.153, 1), (1.255, 'mod20.pdb', 0.204, 1)]
-    return (result_chi_structure_weights_repeat)
+            structure_weight.append((all_files[i], weight[order_of_curve.index(i)]))
+    result_chi_structure_weights.append((chi2, structure_weight))
+    # ([chi2,[(structure, weight), (strucutre,weight), (structure, weight),... ], [chi2,(),...])
+    return result_chi_structure_weights
 
 
-def process_result(tolerance, result_chi_structure_weights_repeat, k_options, selected_files, result):
-    minimum = min(chi2 for chi2, _ in result_chi_structure_weights_repeat)
+def process_result(tolerance, result_chi_structure_weights, k_options, selected_files, result, tmpdir):
+    minimum = min(chi2 for chi2, _ in result_chi_structure_weights)
     maximum = minimum * (1 + tolerance)
     final_result = []
     stats = []
     all_results = []
-
     # sum_result = 0
     # assert len(selected_files) == 1
     # reference_structure = Bio.PDB.PDBParser().get_structure('reference', tmpdirname + selected_files[0])
@@ -349,34 +343,27 @@ def process_result(tolerance, result_chi_structure_weights_repeat, k_options, se
     #   superimposer = Bio.PDB.Superimposer()
     #	superimposer.set_atoms(list(reference_structure.get_atoms()), list(structure.get_atoms()))
     #   sum_result += superimposer.rms * weight
-
-
-
     # TODO biopython
-    molecule_A = selected_files[0]
-    for chi2, structure, weight, repeat in result_chi_structure_weights_repeat:
+    structure_1 = []
+    for chi2, tuple in result_chi_structure_weights:
+        sum_rmsd = 0
         if float(chi2) <= maximum:
-            # if float(weight) >= 0.001:
-            #    final_result.append((weight, structure, repeat))
-            sum_rmsd = 0
-            if k_options == 1:
-                structure_BIO = Bio.PDB.PDBParser().get_structure(structure, structure)
-                ref_model = structure_BIO[0]
-                print(ref_model)
+            assert len(selected_files) == 1
+            reference_structure = Bio.PDB.PDBParser(QUIET=True).get_structure('reference', tmpdir + '/pdbs/' + selected_files[0])
+            for structure, weight in tuple:
+                structure_1 = Bio.PDB.PDBParser(QUIET=True).get_structure('alternative', tmpdir + '/pdbs/' + structure)
                 superimposer = Bio.PDB.Superimposer()
-                superimposer.set_atoms(ref_model, structure)
-                print(Colors.OKBLUE + ' \nRMSD pymol' + Colors.ENDC, sum_rmsd, '\n')
-                stats.append((chi2, sum_rmsd))
-                all_results.append(final_result)
-            else:
-                print('\n Not implemented now', file=sys.stderr)
-                sys.exit(1)
-            print('\n \nResult from multifox for pymol \n')
+                superimposer.set_atoms(list(reference_structure.get_atoms()), list(structure_1.get_atoms()))
+                sum_rmsd += superimposer.rms * weight
+        print(Colors.OKBLUE + ' \nRMSD pymol' + Colors.ENDC, sum_rmsd, '\n')
+        stats.append((chi2, sum_rmsd))
+        all_results.append(final_result)
+
     for weight, structure in final_result:
-        print('Structure {} and weight {} \n'.format(weight, structure))
-    print('len', len(all_results))
-    result.stats = stats
-    result.data_and_weights = all_results
+        print(f'Structure {weight} and weight {structure} \n')
+
+        result.stats = stats
+        result.data_and_weights = all_results
 
 
 def final_statistic(args, all_results):
@@ -394,10 +381,11 @@ def main():
     os.chdir(args.mydirvariable)
     list_pdb_file = find_pdb_file(args.mydirvariable)
     test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
-    result_chi_structure_weights_repeat = []
+    result_chi_structure_weights = []
+    tmpdir = []
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
-        print(Colors.OKGREEN + 'RUN {}/{}'.format(i + 1, args.repeat) + Colors.ENDC, '\n')
+        print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat}' + Colors.ENDC, '\n')
         all_files = random.sample(list_pdb_file, args.n_files)
         # copy to pds
         selected_files = random.sample(all_files, args.k_options)
@@ -407,7 +395,6 @@ def main():
         # copy to metods
         prepare_directory(all_files, selected_files, tmpdir, args.method)
         make_curve_for_experiment(files_and_weights, tmpdir)
-
         print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
         print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
         print(args.method, '\n')
@@ -415,24 +402,23 @@ def main():
             print_parameters_verbose(args, list_pdb_file, all_files)
         result = ResultRMSD(all_files, selected_files, files_and_weights, i + 1, args.method)
         if args.method == 'ensemble':
-            result_chi_structure_weights_repeat = ensemble_fit(all_files, tmpdir)
+            result_chi_structure_weights = ensemble_fit(all_files, tmpdir)
 
         elif args.method == 'eom':
-            result_chi_structure_weights_repeat = gajoe(all_files, tmpdir)
+            result_chi_structure_weights = gajoe(all_files, tmpdir)
 
         elif args.method == 'foxs':
-            result_chi_structure_weights_repeat = multifox(all_files, tmpdir)
+            result_chi_structure_weights = multifox(all_files, tmpdir)
 
-        process_result(args.tolerance, result_chi_structure_weights_repeat,
-                       args.k_options, selected_files, result)
-    #logging.debug('hromadny vysledek', result_chi_structure_weights_repeat)
+        process_result(args.tolerance, result_chi_structure_weights,
+                       args.k_options, selected_files, result, tmpdir)
 
     if not args.preserve:
         shutil.rmtree(tmpdir)
 
     for result in all_results:
         result.print_result()
-    final_statistic(args, all_results)
+        final_statistic(args, all_results)
 
 
 if __name__ == '__main__':
