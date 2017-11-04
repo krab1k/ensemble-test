@@ -52,9 +52,8 @@ class Run:
                 print(f'chi2: {chi2:5.3f} strucuture: {i[0]} weight: {i[1]}')
 
     def get_best_result(self):
-        a = min(self.results)
-        print(self.results)
-        #return min(result[1] for stat in self.results)
+        return min(rmsd for rmsd, _, _ in self.results)
+
 
 
 def get_argument():
@@ -243,12 +242,11 @@ def multifox(all_files, tmpdir):
                 if not line.startswith(' '):
                     if weight_structure != []:
                         result.append((chi2, weight_structure))
-                        print(line)
                     chi2 = float(line.split('|')[1])
                     weight_structure = []
 
                 else:
-                    weight = line[line.index('|') + 1:line.index('(')]
+                    weight = float(line[line.index('|') + 1:line.index('(')])
                     structure = line.split('pdbs/')[1].split('(')[0].strip()
                     weight_structure.append((structure, weight))
             result.append((chi2, weight_structure))
@@ -344,18 +342,18 @@ def process_result(tolerance, result_chi_structure_weights, selected_files, run,
                 superimposer = Bio.PDB.Superimposer()
                 superimposer.set_atoms(list(reference_structure.get_atoms()), list(structure_1.get_atoms()))
                 sum_rmsd += superimposer.rms * weight
-            print(Colors.OKBLUE + ' \nweighted RMSD = ' + Colors.ENDC, sum_rmsd, '\n')
+            #print(Colors.OKBLUE + ' \nweighted RMSD = ' + Colors.ENDC, sum_rmsd, '\n')
 
         all_results.append((sum_rmsd, chi2, names_and_weights))
 
     run.results = all_results
+    return run
 
 
-def final_statistic(args, run):
+def final_statistic(args, runs):
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
-    run.get_best_result()
-    #rmsd = [result.get_best_result() for result in all_results]
-    #print('RMSD = ', np.mean(rmsd), '±', np.std(rmsd))
+    rmsd = [result.get_best_result() for result in runs]
+    print('RMSD = ', np.mean(rmsd), '±', np.std(rmsd))
     print('Number of runs', args.repeat, '\n')
 
 
@@ -396,7 +394,7 @@ def main():
         elif args.method == 'foxs':
             result_chi_structure_weights = multifox(all_files, tmpdir)
 
-        process_result(args.tolerance, result_chi_structure_weights, selected_files, run, tmpdir)
+        run = process_result(args.tolerance, result_chi_structure_weights, selected_files, run, tmpdir)
 
         all_runs.append(run)
 
