@@ -29,25 +29,32 @@ class Colors:
     UNDERLINE = '\033[4m'
 
 
-class ResultRMSD:
-    def __init__(self, all_files, selected_files, assigment_files_and_weights, run, method):
-        self.selected_files = selected_files
+class Run:
+    def __init__(self, all_files, selected_files, weights, run, method):
+        # experiment
         self.all_files = all_files
-        self.assigment_files_and_weights = assigment_files_and_weights
-        self.run = run
-        self.data_and_weights = []
-        self.stats = []
+        self.selected_files = selected_files
+        self.weights = weights
         self.method = method
+        self.run = run
+        # results from experiment
+        self.results = []
 
     def print_result(self):
         print(Colors.OKGREEN, 'Run:', self.run, Colors.ENDC)
-        print('Selected:', self.assigment_files_and_weights)
-        print('Results:\n')
-        for r, s in zip(self.data_and_weights, self.stats):
-            print(f'RMSD: {s[1]:5.3f} chi2: {s[0]:5.3f} data: {r}')
+        print(Colors.OKBLUE +'\nSelected structure:\n'+ Colors.ENDC)
+        for structure, weight in list(zip(self.selected_files, self.weights)):
+            print('Structure', structure, '\tweights', weight)
+        print(Colors.OKBLUE +'\nResults:\n '+ Colors.ENDC)
+        for sumrmsd, chi2, data in self.results:
+            print(f'RMSD: {sumrmsd:5.3f}')
+            for i in data:
+                print(f'chi2: {chi2:5.3f} strucuture: {i[0]} weight: {i[1]}')
 
     def get_best_result(self):
-        return min(stat[1] for stat in self.stats)
+        a = min(self.results)
+        print(self.results)
+        #return min(result[1] for stat in self.results)
 
 
 def get_argument():
@@ -244,7 +251,6 @@ def multifox(all_files, tmpdir):
                     weight = line[line.index('|') + 1:line.index('(')]
                     structure = line.split('pdbs/')[1].split('(')[0].strip()
                     weight_structure.append((structure, weight))
-                    print(chi2, weight_structure)
             result.append((chi2, weight_structure))
     # ((chi2, [('mod10.pdb', 0.3), ('mod15.pdb', 0.7)]),(chi2, [(strucutre, weight),(strucutre, weight),...)])
     return result
@@ -303,9 +309,7 @@ def gajoe(all_files, tmpdir):
         sys.exit(1)
     # process results from gajoe (/GAOO1/curve_1/
     chi2 = None
-    weight = []
-    order_of_curve = []
-    reg = f'^\s*\d+\)'
+    structure_weight = []
     m = re.compile('^\s*\d+\)')
     with open(tmpdir + '/GA001/curve_1/logFile_001_1.log') as file_gajoe:
         for line in file_gajoe:
@@ -316,73 +320,55 @@ def gajoe(all_files, tmpdir):
                 # 00003ethod/juneom.pd ~0.172.00
             p = m.search(line)
             if p != None:
-                order_of_curve.append(int(line.split()[1][:5]) - 1)  # number of curves in logfile > 1!!!
-                weight.append(float(line.split()[4][1:6]))
+                index = int(line.split()[1][:5])- 1
+                weight = float(line.split()[4][1:6])
+                structure_weight.append((all_files[index], weight))
 
-    result_chi_structure_weights = []
-    structure_weight = []
-    for i, file in enumerate(all_files):
-        if i in order_of_curve:
-            structure_weight.append((all_files[i], weight[order_of_curve.index(i)]))
-    result_chi_structure_weights.append((chi2, structure_weight))
+    return [(chi2, structure_weight)]
+
     # ([chi2,[(structure, weight), (strucutre,weight), (structure, weight),... ], [chi2,(),...])
-    return result_chi_structure_weights
 
 
-def process_result(tolerance, result_chi_structure_weights, k_options, selected_files, result, tmpdir):
+def process_result(tolerance, result_chi_structure_weights, selected_files, run, tmpdir):
     minimum = min(chi2 for chi2, _ in result_chi_structure_weights)
     maximum = minimum * (1 + tolerance)
-    final_result = []
-    stats = []
+
     all_results = []
-    # sum_result = 0
-    # assert len(selected_files) == 1
-    # reference_structure = Bio.PDB.PDBParser().get_structure('reference', tmpdirname + selected_files[0])
-    # for structure, weight in data:
-    # 	structure = Bio.PDB.PDBParser().get_structure('alternative', tmpdirname + structure)
-    #   superimposer = Bio.PDB.Superimposer()
-    #	superimposer.set_atoms(list(reference_structure.get_atoms()), list(structure.get_atoms()))
-    #   sum_result += superimposer.rms * weight
-    # TODO biopython
-    structure_1 = []
-    for chi2, tuple in result_chi_structure_weights:
+    for chi2, names_and_weights in result_chi_structure_weights:
         sum_rmsd = 0
         if float(chi2) <= maximum:
             assert len(selected_files) == 1
             reference_structure = Bio.PDB.PDBParser(QUIET=True).get_structure('reference', tmpdir + '/pdbs/' + selected_files[0])
-            for structure, weight in tuple:
+            for structure, weight in names_and_weights:
                 structure_1 = Bio.PDB.PDBParser(QUIET=True).get_structure('alternative', tmpdir + '/pdbs/' + structure)
                 superimposer = Bio.PDB.Superimposer()
                 superimposer.set_atoms(list(reference_structure.get_atoms()), list(structure_1.get_atoms()))
                 sum_rmsd += superimposer.rms * weight
-        print(Colors.OKBLUE + ' \nRMSD pymol' + Colors.ENDC, sum_rmsd, '\n')
-        stats.append((chi2, sum_rmsd))
-        all_results.append(final_result)
+            print(Colors.OKBLUE + ' \nweighted RMSD = ' + Colors.ENDC, sum_rmsd, '\n')
 
-    for weight, structure in final_result:
-        print(f'Structure {weight} and weight {structure} \n')
+        all_results.append((sum_rmsd, chi2, names_and_weights))
 
-        result.stats = stats
-        result.data_and_weights = all_results
+    run.results = all_results
 
 
-def final_statistic(args, all_results):
+def final_statistic(args, run):
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
-    rmsd = [result.get_best_result() for result in all_results]
-    print('RMSD = ', np.mean(rmsd), '±', np.std(rmsd))
+    run.get_best_result()
+    #rmsd = [result.get_best_result() for result in all_results]
+    #print('RMSD = ', np.mean(rmsd), '±', np.std(rmsd))
     print('Number of runs', args.repeat, '\n')
 
 
 def main():
     random.seed(1)
     np.random.seed(1)
-    all_results = []
     args = get_argument()
     os.chdir(args.mydirvariable)
     list_pdb_file = find_pdb_file(args.mydirvariable)
     test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
     result_chi_structure_weights = []
     tmpdir = []
+    all_runs = []
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
         print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat}' + Colors.ENDC, '\n')
@@ -400,7 +386,7 @@ def main():
         print(args.method, '\n')
         if args.verbose:
             print_parameters_verbose(args, list_pdb_file, all_files)
-        result = ResultRMSD(all_files, selected_files, files_and_weights, i + 1, args.method)
+        run = Run(all_files, selected_files, weights, i + 1, args.method)
         if args.method == 'ensemble':
             result_chi_structure_weights = ensemble_fit(all_files, tmpdir)
 
@@ -410,15 +396,17 @@ def main():
         elif args.method == 'foxs':
             result_chi_structure_weights = multifox(all_files, tmpdir)
 
-        process_result(args.tolerance, result_chi_structure_weights,
-                       args.k_options, selected_files, result, tmpdir)
+        process_result(args.tolerance, result_chi_structure_weights, selected_files, run, tmpdir)
+
+        all_runs.append(run)
 
     if not args.preserve:
         shutil.rmtree(tmpdir)
 
-    for result in all_results:
-        result.print_result()
-        final_statistic(args, all_results)
+    for run in all_runs:
+        run.print_result()
+    
+    final_statistic(args, all_runs)
 
 
 if __name__ == '__main__':
