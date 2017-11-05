@@ -40,20 +40,20 @@ class Run:
         # results from experiment
         self.results = []
 
-    def print_result(self):
+    def print_result(self, args):
         print(Colors.OKGREEN, 'Run:', self.run, Colors.ENDC)
-        print(Colors.OKBLUE +'\nSelected structure:\n'+ Colors.ENDC)
+        print(Colors.OKBLUE + '\nSelected structure:\n' + Colors.ENDC)
         for structure, weight in list(zip(self.selected_files, self.weights)):
             print('Structure', structure, '\tweights', weight)
-        print(Colors.OKBLUE +'\nResults:\n '+ Colors.ENDC)
-        for sumrmsd, chi2, data in self.results:
-            print(f'RMSD: {sumrmsd:5.3f}')
-            for i in data:
-                print(f'chi2: {chi2:5.3f} strucuture: {i[0]} weight: {i[1]}')
+        if args.verbose:
+            print(Colors.OKBLUE + '\nResults:\n ' + Colors.ENDC)
+            for sumrmsd, chi2, data in self.results:
+                print(f'RMSD: {sumrmsd:5.5f} {chi2}\n')
+                for structure, weight in data:
+                    print(f'strucuture: {structure} weight: {weight} \n')
 
     def get_best_result(self):
         return min(rmsd for rmsd, _, _ in self.results)
-
 
 
 def get_argument():
@@ -240,7 +240,7 @@ def multifox(all_files, tmpdir):
                 # 1 |  3.05 | x1 3.05 (0.99, 0.20)
                 #    0   | 1.000 (1.000, 1.000) | /tmp/tmpnz7dbids/pdbs/mod13.pdb  (0.062)
                 if not line.startswith(' '):
-                    if weight_structure != []:
+                    if weight_structure:
                         result.append((chi2, weight_structure))
                     chi2 = float(line.split('|')[1])
                     weight_structure = []
@@ -317,14 +317,13 @@ def gajoe(all_files, tmpdir):
                 # 00002ethod/juneom.pd ~0.253.00
                 # 00003ethod/juneom.pd ~0.172.00
             p = m.search(line)
-            if p != None:
-                index = int(line.split()[1][:5])- 1
+            if p:
+                index = int(line.split()[1][:5]) - 1
                 weight = float(line.split()[4][1:6])
                 structure_weight.append((all_files[index], weight))
 
     return [(chi2, structure_weight)]
-
-    # ([chi2,[(structure, weight), (strucutre,weight), (structure, weight),... ], [chi2,(),...])
+    # ([chi2,[(structure, weight), (structure,weight), (structure, weight),... ], [chi2,(),...])
 
 
 def process_result(tolerance, result_chi_structure_weights, selected_files, run, tmpdir):
@@ -336,15 +335,16 @@ def process_result(tolerance, result_chi_structure_weights, selected_files, run,
         sum_rmsd = 0
         if float(chi2) <= maximum:
             assert len(selected_files) == 1
-            reference_structure = Bio.PDB.PDBParser(QUIET=True).get_structure('reference', tmpdir + '/pdbs/' + selected_files[0])
+            reference_structure = Bio.PDB.PDBParser(QUIET=True).get_structure('reference',
+                                                                              tmpdir + '/pdbs/' + selected_files[0])
             for structure, weight in names_and_weights:
                 structure_1 = Bio.PDB.PDBParser(QUIET=True).get_structure('alternative', tmpdir + '/pdbs/' + structure)
                 superimposer = Bio.PDB.Superimposer()
                 superimposer.set_atoms(list(reference_structure.get_atoms()), list(structure_1.get_atoms()))
                 sum_rmsd += superimposer.rms * weight
-            #print(Colors.OKBLUE + ' \nweighted RMSD = ' + Colors.ENDC, sum_rmsd, '\n')
+            # print(Colors.OKBLUE + ' \nweighted RMSD = ' + Colors.ENDC, sum_rmsd, '\n')
 
-        all_results.append((sum_rmsd, chi2, names_and_weights))
+            all_results.append((sum_rmsd, chi2, names_and_weights))  # add results only with RMSD within selected limit
 
     run.results = all_results
     return run
@@ -402,8 +402,8 @@ def main():
         shutil.rmtree(tmpdir)
 
     for run in all_runs:
-        run.print_result()
-    
+        run.print_result(args)
+
     final_statistic(args, all_runs)
 
 
