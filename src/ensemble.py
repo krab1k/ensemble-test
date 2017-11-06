@@ -15,7 +15,7 @@ from adderror import adderror
 import pathlib
 import Bio.PDB
 
-ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensamble-fit'
+ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
 
 
 class Colors:
@@ -44,13 +44,13 @@ class Run:
         print(Colors.OKGREEN, 'Run:', self.run, Colors.ENDC)
         print(Colors.OKBLUE + '\nSelected structure:\n' + Colors.ENDC)
         for structure, weight in list(zip(self.selected_files, self.weights)):
-            print('Structure', structure, '\tweights', weight)
+            print(f'structure: {structure} weight: {weight:.3f} \n')
         if args.verbose:
             print(Colors.OKBLUE + '\nResults:\n ' + Colors.ENDC)
             for sumrmsd, chi2, data in self.results:
-                print(f'RMSD: {sumrmsd:5.5f} {chi2}\n')
+                print(f'RMSD: {sumrmsd:.3f} Chi2: {chi2:.3f}\n')
                 for structure, weight in data:
-                    print(f'strucuture: {structure} weight: {weight} \n')
+                    print(f'structure: {structure} weight: {weight:.3f} \n')
 
     def get_best_result(self):
         return min(rmsd for rmsd, _, _ in self.results)
@@ -182,14 +182,16 @@ def make_curve_for_experiment(files_and_weights, tmpdir):
 
 def ensemble_fit(all_files, tmpdir):
     # RUN ensemble
+    currdir = os.getcwd()
+    os.chdir(tmpdir)
     command = f'{ENSEMBLE_BINARY} -L -p {tmpdir}/pdbs/ensembles/ -n {len(all_files)} -m {tmpdir}/method/curve.modified.dat'
-    shutil.copy('../test/result', tmpdir)
     print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
-    # return_value = subprocess.call(command, shell=True)
-    # if return_value:
-    #    print(f'ERROR: ensemble failed', file = sys.stderr)
-    #    sys.exit(1)
+    return_value = subprocess.call(command, shell=True)
+    if return_value:
+        print(f'ERROR: ensemble failed', file = sys.stderr)
+        sys.exit(1)
 
+    os.chdir(currdir)
     # Process with result from ensemble
     result_chi_and_weights_ensemble = []
     # 5000
@@ -350,11 +352,11 @@ def process_result(tolerance, result_chi_structure_weights, selected_files, run,
     return run
 
 
-def final_statistic(args, runs):
+def final_statistic(runs):
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
     rmsd = [result.get_best_result() for result in runs]
-    print('RMSD = ', np.mean(rmsd), '±', np.std(rmsd))
-    print('Number of runs', args.repeat, '\n')
+    print('Number of runs: ', len(runs))
+    print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
 
 
 def main():
@@ -365,7 +367,6 @@ def main():
     list_pdb_file = find_pdb_file(args.mydirvariable)
     test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
     result_chi_structure_weights = []
-    tmpdir = []
     all_runs = []
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
@@ -376,7 +377,7 @@ def main():
         # copy to dats
         weights = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
         files_and_weights = list(zip(selected_files, weights))
-        # copy to metods
+        # copy to methods
         prepare_directory(all_files, selected_files, tmpdir, args.method)
         make_curve_for_experiment(files_and_weights, tmpdir)
         print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
@@ -404,7 +405,7 @@ def main():
     for run in all_runs:
         run.print_result(args)
 
-    final_statistic(args, all_runs)
+    final_statistic(all_runs)
 
 
 if __name__ == '__main__':
