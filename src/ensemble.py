@@ -217,14 +217,14 @@ def ensemble_fit(all_files, tmpdir):
     # ((chi2, [('mod10.pdb', 0.3), ('mod15.pdb', 0.7)]),(chi2(strucutre, weight),(strucutre, weight)))
 
 
-def multifox(all_files, tmpdir):
+def multifoxs(all_files, tmpdir):
     # RUN Multi_foxs
-    files_for_multifox = ' '.join(str(tmpdir + '/pdbs/' + e) for e in all_files)
+    files_for_multifoxs = ' '.join(str(tmpdir + '/pdbs/' + e) for e in all_files)
     print(files_for_multifox)
-    command = f'multi_foxs {tmpdir}/method/curve.modified.dat {files_for_multifox}'
+    command = f'multi_foxs {tmpdir}/method/curve.modified.dat {files_for_multifoxs}'
     return_value = subprocess.check_call(command, cwd=tmpdir, shell=True)
     if return_value:
-        print(f'ERROR: multifox failed', file=sys.stderr)
+        print(f'ERROR: multifoxs failed', file=sys.stderr)
         sys.exit(1)
     # Process with result from Multi_foxs
     multifoxs_files = []
@@ -393,14 +393,14 @@ def main():
             result_chi_structure_weights = gajoe(all_files, tmpdir)
 
         elif args.method == 'foxs':
-            result_chi_structure_weights = multifox(all_files, tmpdir)
+            result_chi_structure_weights = multifoxs(all_files, tmpdir)
 
         run = process_result(args.tolerance, result_chi_structure_weights, selected_files, run, tmpdir)
 
         all_runs.append(run)
 
-    if not args.preserve:
-        shutil.rmtree(tmpdir)
+        if not args.preserve:
+            shutil.rmtree(tmpdir)
 
     for run in all_runs:
         run.print_result(args)
