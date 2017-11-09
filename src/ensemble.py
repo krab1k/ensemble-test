@@ -85,7 +85,7 @@ def get_argument():
                         action="store_true")
 
     parser.add_argument("--method", help="choose method ensamble, eom, foxs",
-                        choices=['ensemble', 'eom', 'foxs'])
+                        choices=['ensemble', 'eom', 'multifoxs'])
 
     return parser.parse_args()
 
@@ -188,7 +188,7 @@ def ensemble_fit(all_files, tmpdir):
     print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
     return_value = subprocess.call(command, shell=True)
     if return_value:
-        print(f'ERROR: ensemble failed', file = sys.stderr)
+        print(f'ERROR: ensemble failed', file=sys.stderr)
         sys.exit(1)
 
     os.chdir(currdir)
@@ -220,15 +220,18 @@ def ensemble_fit(all_files, tmpdir):
 def multifoxs(all_files, tmpdir):
     # RUN Multi_foxs
     files_for_multifoxs = ' '.join(str(tmpdir + '/pdbs/' + e) for e in all_files)
-    print(files_for_multifox)
-    command = f'multi_foxs {tmpdir}/method/curve.modified.dat {files_for_multifoxs}'
-    return_value = subprocess.check_call(command, cwd=tmpdir, shell=True)
+    print(files_for_multifoxs)
+    currdir = os.getcwd()
+    command = f'multi_foxs {tmpdir}/method/curve.modified.dat {files_for_multifoxs} >/dev/null '
+    return_value = subprocess.check_call(command, cwd=f'{tmpdir}/results/', shell=True)
     if return_value:
         print(f'ERROR: multifoxs failed', file=sys.stderr)
         sys.exit(1)
+    os.chdir(currdir)
+
     # Process with result from Multi_foxs
     multifoxs_files = []
-    files = listdir(tmpdir)
+    files = listdir(f'{tmpdir}/results/')
     for line in files:
         line = line.rstrip()
         if re.search('\d.txt$', line):
@@ -236,7 +239,7 @@ def multifoxs(all_files, tmpdir):
     result = []
     chi2 = 0
     for filename in multifoxs_files:
-        with open(tmpdir + '/' + filename) as file:
+        with open(tmpdir + '/results/' + filename) as file:
             weight_structure = []
             for line in file:
                 # 1 |  3.05 | x1 3.05 (0.99, 0.20)
@@ -301,9 +304,9 @@ def gajoe(all_files, tmpdir):
                     lineformat = ff.FortranRecordWriter('(1E14.6)')
                     b = lineformat.write([data1])
                     file1.write(f'{b}\n')
-    command = f'yes | gajoe ./method/curve_gajoe.dat -i=./method/juneom.eom -t=5'
+    command = f'yes | gajoe {tmpdir}/method/curve_gajoe.dat -i={tmpdir}/method/juneom.eom -t=5'
     print(command)
-    return_value = subprocess.check_call(command, cwd=tmpdir, shell=True)
+    return_value = subprocess.check_call(command, cwd=f'{tmpdir}/results/', shell=True)
     if return_value:
         print(f'ERROR: GAJOE failed', file=sys.stderr)
         sys.exit(1)
@@ -311,7 +314,7 @@ def gajoe(all_files, tmpdir):
     chi2 = None
     structure_weight = []
     m = re.compile('^\s*\d+\)')
-    with open(tmpdir + '/GA001/curve_1/logFile_001_1.log') as file_gajoe:
+    with open(tmpdir + '/results//GA001/curve_1/logFile_001_1.log') as file_gajoe:
         for line in file_gajoe:
             if '-- Chi^2 : ' in line:
                 chi2 = float(line.split(':')[1])
@@ -392,7 +395,7 @@ def main():
         elif args.method == 'eom':
             result_chi_structure_weights = gajoe(all_files, tmpdir)
 
-        elif args.method == 'foxs':
+        elif args.method == 'multifoxs':
             result_chi_structure_weights = multifoxs(all_files, tmpdir)
 
         run = process_result(args.tolerance, result_chi_structure_weights, selected_files, run, tmpdir)
