@@ -17,7 +17,7 @@ import Bio.PDB
 import logging
 
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
-DEFAULT_OUTPUT = '/home/petra/Dokumenty/ensemble-test/test/'
+#DEFAULT_OUTPUT = '/home/petra/Dokumenty/ensemble-test/test/'
 
 class Colors:
     HEADER = '\033[95m'
@@ -89,7 +89,7 @@ def get_argument():
                         choices=['ensemble', 'eom', 'multifoxs'])
 
     parser.add_argument("--output", help="choose directory to save output",
-                        metavar = "DIR", dest="output",default=DEFAULT_OUTPUT)
+                        metavar = "DIR", dest="output")
 
     return parser.parse_args()
 
@@ -142,7 +142,7 @@ def prepare_directory(all_files, selected_files, tmpdir, method):
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
     # prepare 'file'.dat and copy to /dats/
     for file in all_files:
-        return_value = subprocess.run(['foxs', f'{file}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return_value = subprocess.run(['foxs', f'{file}'])#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if return_value.returncode:
             print(f'ERROR: Foxs failed.', file=sys.stderr)
             sys.exit(1)
@@ -197,7 +197,7 @@ def ensemble_fit(all_files, tmpdir):
     # 5000
     # 1.08e+01,0.952,2.558,4.352610,0.000,0.300,0.000,0.000,0.000,0.000,0.000,0.092,0.000,0.908
     # 1.08e+01,0.950,2.558,4.752610,0.000,0.100,0.000,0.000,0.000,0.000,0.000,0.092,0.000,0.908
-    with open(tmpdir + '/result', 'r') as f:
+    with open(tmpdir + '/results/result', 'r') as f:
         next(f)
 
         for line in f:
@@ -369,7 +369,7 @@ def main():
     test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
     result_chi_structure_weights = []
     all_runs = []
-    logging.basicConfig(filename=f'{args.output}/result.log', level=logging.DEBUG)
+    #logging.basicConfig(filename='result.log', level=logging.DEBUG)
     logging.debug('This message should go to the log file')
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
