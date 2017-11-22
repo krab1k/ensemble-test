@@ -14,9 +14,10 @@ import fortranformat as ff
 from adderror import adderror
 import pathlib
 import Bio.PDB
+import logging
 
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
-
+DEFAULT_OUTPUT = '/home/petra/Dokumenty/ensemble-test/test/'
 
 class Colors:
     HEADER = '\033[95m'
@@ -87,6 +88,9 @@ def get_argument():
     parser.add_argument("--method", help="choose method ensamble, eom, foxs",
                         choices=['ensemble', 'eom', 'multifoxs'])
 
+    parser.add_argument("--output", help="choose directory to save output",
+                        metavar = "DIR", dest="output",default=DEFAULT_OUTPUT)
+
     return parser.parse_args()
 
 
@@ -125,6 +129,7 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
         else:
             print(all_files[i], '\t', end='')
     print('\n')
+    print('====================================================')
 
 
 def prepare_directory(all_files, selected_files, tmpdir, method):
@@ -137,9 +142,8 @@ def prepare_directory(all_files, selected_files, tmpdir, method):
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
     # prepare 'file'.dat and copy to /dats/
     for file in all_files:
-        command = f'foxs {file}'
-        return_value = subprocess.call(command, shell=True)
-        if return_value:
+        return_value = subprocess.run(['foxs', f'{file}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if return_value.returncode:
             print(f'ERROR: Foxs failed.', file=sys.stderr)
             sys.exit(1)
         shutil.copy(file + '.dat', f'{tmpdir}/dats/')
@@ -182,16 +186,12 @@ def make_curve_for_experiment(files_and_weights, tmpdir):
 
 def ensemble_fit(all_files, tmpdir):
     # RUN ensemble
-    currdir = os.getcwd()
-    os.chdir(tmpdir)
     command = f'{ENSEMBLE_BINARY} -L -p {tmpdir}/pdbs/ensembles/ -n {len(all_files)} -m {tmpdir}/method/curve.modified.dat'
     print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
-    return_value = subprocess.call(command, shell=True)
-    if return_value:
+    call = subprocess.run([f'{ENSEMBLE_BINARY}','-L','-p',f'{tmpdir}/pdbs/ensembles/','-n',f'{len(all_files)}','-m',f'{tmpdir}/method/curve.modified.dat'], cwd=f'{tmpdir}/results/', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if call.returncode:
         print(f'ERROR: ensemble failed', file=sys.stderr)
         sys.exit(1)
-
-    os.chdir(currdir)
     # Process with result from ensemble
     result_chi_and_weights_ensemble = []
     # 5000
@@ -219,15 +219,13 @@ def ensemble_fit(all_files, tmpdir):
 
 def multifoxs(all_files, tmpdir):
     # RUN Multi_foxs
-    files_for_multifoxs = ' '.join(str(tmpdir + '/pdbs/' + e) for e in all_files)
+    files_for_multifoxs = [str(tmpdir + '/pdbs/' + file) for file in all_files]
     print(files_for_multifoxs)
-    currdir = os.getcwd()
-    command = f'multi_foxs {tmpdir}/method/curve.modified.dat {files_for_multifoxs} >/dev/null '
-    return_value = subprocess.check_call(command, cwd=f'{tmpdir}/results/', shell=True)
-    if return_value:
+    call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat', *files_for_multifoxs], cwd=f'{tmpdir}/results/', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    print(call)
+    if call.returncode: # multifoxs don't get right returnvalue
         print(f'ERROR: multifoxs failed', file=sys.stderr)
         sys.exit(1)
-    os.chdir(currdir)
 
     # Process with result from Multi_foxs
     multifoxs_files = []
@@ -283,7 +281,6 @@ def gajoe(all_files, tmpdir):
     #  Curve no.     1
     # 0.309279E+08
     num_lines = sum(1 for line in open(all_files[0] + ".dat")) - 2
-    print(num_lines)
     with open(tmpdir + '/method/juneom.eom', 'w') as file1:
         file1.write(f'    S values   {num_lines} \n')
         with open(all_files[0] + ".dat") as file2:
@@ -304,10 +301,10 @@ def gajoe(all_files, tmpdir):
                     lineformat = ff.FortranRecordWriter('(1E14.6)')
                     b = lineformat.write([data1])
                     file1.write(f'{b}\n')
-    command = f'yes | gajoe {tmpdir}/method/curve_gajoe.dat -i={tmpdir}/method/juneom.eom -t=5'
-    print(command)
-    return_value = subprocess.check_call(command, cwd=f'{tmpdir}/results/', shell=True)
-    if return_value:
+    p1 = subprocess.Popen(['yes'], stdout=subprocess.PIPE)
+    call = subprocess.Popen(['gajoe', f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom', '-t=5'], cwd=f'{tmpdir}/results/', stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    call.communicate()
+    if call.returncode:
         print(f'ERROR: GAJOE failed', file=sys.stderr)
         sys.exit(1)
     # process results from gajoe (/GAOO1/curve_1/
@@ -356,6 +353,7 @@ def process_result(tolerance, result_chi_structure_weights, selected_files, run,
 
 
 def final_statistic(runs):
+    print('====================================================')
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
     rmsd = [result.get_best_result() for result in runs]
     print('Number of runs: ', len(runs))
@@ -371,6 +369,8 @@ def main():
     test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
     result_chi_structure_weights = []
     all_runs = []
+    logging.basicConfig(filename=f'{args.output}/result.log', level=logging.DEBUG)
+    logging.debug('This message should go to the log file')
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
         print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat}' + Colors.ENDC, '\n')
