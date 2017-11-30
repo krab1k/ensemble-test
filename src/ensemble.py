@@ -16,6 +16,8 @@ import pathlib
 import Bio.PDB
 import logging
 
+from comparison import compare_ensembles
+
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
 #DEFAULT_OUTPUT = '/home/petra/Dokumenty/ensemble-test/test/'
 
@@ -328,25 +330,18 @@ def gajoe(all_files, tmpdir):
     # ([chi2,[(structure, weight), (structure,weight), (structure, weight),... ], [chi2,(),...])
 
 
-def process_result(tolerance, result_chi_structure_weights, selected_files, run, tmpdir):
+def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
     minimum = min(chi2 for chi2, _ in result_chi_structure_weights)
     maximum = minimum * (1 + tolerance)
 
     all_results = []
     for chi2, names_and_weights in result_chi_structure_weights:
+        result_files = [file for file, _ in names_and_weights]
+        result_weights = [weight for _, weight in names_and_weights]
         sum_rmsd = 0
         if float(chi2) <= maximum:
-            assert len(selected_files) == 1
-            reference_structure = Bio.PDB.PDBParser(QUIET=True).get_structure('reference',
-                                                                              tmpdir + '/pdbs/' + selected_files[0])
-            for structure, weight in names_and_weights:
-                structure_1 = Bio.PDB.PDBParser(QUIET=True).get_structure('alternative', tmpdir + '/pdbs/' + structure)
-                superimposer = Bio.PDB.Superimposer()
-                superimposer.set_atoms(list(reference_structure.get_atoms()), list(structure_1.get_atoms()))
-                sum_rmsd += superimposer.rms * weight
-            # print(Colors.OKBLUE + ' \nweighted RMSD = ' + Colors.ENDC, sum_rmsd, '\n')
-
-            all_results.append((sum_rmsd, chi2, names_and_weights))  # add results only with RMSD within selected limit
+            weighted_rmsd = compare_ensembles(run.selected_files, result_files, run.weights, result_weights)
+            all_results.append((weighted_rmsd, chi2, names_and_weights))
 
     run.results = all_results
     return run
@@ -398,7 +393,7 @@ def main():
         elif args.method == 'multifoxs':
             result_chi_structure_weights = multifoxs(all_files, tmpdir)
 
-        run = process_result(args.tolerance, result_chi_structure_weights, selected_files, run, tmpdir)
+        run = process_result(args.tolerance, result_chi_structure_weights, run, tmpdir)
 
         all_runs.append(run)
 
