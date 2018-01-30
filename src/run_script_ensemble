@@ -58,20 +58,19 @@ def run_script(method, args, path):
 
 def work_with_result(path, method):
     rmsd = []
-    #method = []
-    chi2 = []
+    std = []
     files = listdir(path)
     for line in files:
         with open(path + '/' + line) as file:
             for line in file:
                 if line.startswith('*****FINAL RMSD'):
                     rmsd.append(line.split('|')[1])
-                    chi2.append(line.split('|')[2])
+                    std.append(line.split('|')[2])
                 #if line.startswith('#Method:'):
                 #    method.append((line.split(': ')[1]).rstrip())
-    result_file = list(zip(method,rmsd,chi2))
-    for method,rmsd,chi2 in result_file:
-        logging.info(f'{method} || {rmsd} || {chi2}')
+    result_file = list(zip(method,rmsd,std))
+    for method,rmsd,std in result_file:
+        logging.info(f'{method} , {rmsd} , {std}')
 
 def main():
     args = get_argument()
@@ -87,9 +86,11 @@ def main():
     logging.root.setLevel(logging.INFO)
     logging.root.setLevel(logging.DEBUG)
     logging.info(f'***Output from script*** {strftime("%Y-%m-%d__%H-%M-%S", localtime())} \n')
-    logging.info(f'#Total files | {args.n_value} \n')
-    logging.info(f'#Selected files | {args.k_value} \n')
-    logging.info('Results for methods')
+    logging.info(f'#Total files : {args.n_value} \n')
+    logging.info(f'#Selected files : {args.k_value} \n')
+    logging.info(f'#Number of repetition: {args.repeat} \n')
+    logging.info(f'Directory with structures: {args.mydirvariable}')
+    logging.info('Method, RMSD, std')
 
     for method in method_list:
         run_script(method, args, path)

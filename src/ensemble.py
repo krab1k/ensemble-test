@@ -373,7 +373,7 @@ def final_statistic(runs):
     print('Number of runs: ', len(runs))
     logging.info(f'*****RMSDs| {len(runs)} |{rmsd}')
     print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
-    logging.info(f'*****FINAL RMSD| {np.mean(rmsd)}|{np.std(rmsd)}')
+    logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd)}|{np.std(rmsd)}')
 
 def main():
     random.seed(1)
