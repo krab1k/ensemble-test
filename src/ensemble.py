@@ -13,13 +13,11 @@ import numpy as np
 import fortranformat as ff
 from adderror import adderror
 import pathlib
-import Bio.PDB
 import logging
-
+from time import localtime, strftime
 from comparison import compare_ensembles
 
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
-#DEFAULT_OUTPUT = '/home/petra/Dokumenty/ensemble-test/test/'
 
 class Colors:
     HEADER = '\033[95m'
@@ -52,11 +50,25 @@ class Run:
             print(Colors.OKBLUE + '\nResults:\n ' + Colors.ENDC)
             for sumrmsd, chi2, data in self.results:
                 print(f'RMSD: {sumrmsd:.3f} Chi2: {chi2:.3f}\n')
+                logging.info(f'###RMSD: {sumrmsd} \n###CHI2: {chi2}')
                 for structure, weight in data:
                     print(f'structure: {structure} weight: {weight:.3f} \n')
+                    logging.info(f'#structure: {structure}| weight: {weight}')
 
     def get_best_result(self):
         return min(rmsd for rmsd, _, _ in self.results)
+
+class SpecialFormatter(logging.Formatter):
+    FORMATS = {logging.DEBUG : logging._STYLES['{'][0]("DEBUG: {message}"),
+           logging.ERROR : logging._STYLES['{'][0]("{module} : {lineno}: {message}"),
+           logging.INFO : logging._STYLES['{'][0]("{message}"),
+           'DEFAULT' : logging._STYLES['{'][0](" {message}")}
+
+    def format(self, record):
+        # Ugly. Should be better
+        self._style = self.FORMATS.get(record.levelno, self.FORMATS['DEFAULT'])
+        return logging.Formatter.format(self, record)
+
 
 
 def get_argument():
@@ -110,12 +122,15 @@ def find_pdb_file(mydirvariable):
 def test_argument(n_files, k_options, list_pdb_file, tolerance):
     if len(list_pdb_file) < n_files:
         print(Colors.WARNING + "Number of pdb files is ONLY" + Colors.ENDC, len(list_pdb_file), '\n')
+        logging.ERROR(f'Number of pdb files is ONLY {len(list_pdb_file)}')
         sys.exit(1)
     if k_options > n_files:
         print(Colors.WARNING + "Number of selected structure is ONLY" + Colors.ENDC, n_files, '\n')
+        logging.ERROR(f'Number of selected structure is ONLY { n_files}')
         sys.exit(1)
     if tolerance > 1:
         print('Tolerance should be less then 1.')
+        logging.ERROR('Tolerance should be less then 1.')
         sys.exit(1)
 
 
@@ -147,6 +162,7 @@ def prepare_directory(all_files, selected_files, tmpdir, method):
         return_value = subprocess.run(['foxs', f'{file}'])#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         if return_value.returncode:
             print(f'ERROR: Foxs failed.', file=sys.stderr)
+            logging.ERROR(f'Foxs failed.')
             sys.exit(1)
         shutil.copy(file + '.dat', f'{tmpdir}/dats/')
 
@@ -193,6 +209,8 @@ def ensemble_fit(all_files, tmpdir):
     call = subprocess.run([f'{ENSEMBLE_BINARY}','-L','-p',f'{tmpdir}/pdbs/ensembles/','-n',f'{len(all_files)}','-m',f'{tmpdir}/method/curve.modified.dat'], cwd=f'{tmpdir}/results/', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if call.returncode:
         print(f'ERROR: ensemble failed', file=sys.stderr)
+        logging.ERROR(f'Ensemble failed.')
+
         sys.exit(1)
     # Process with result from ensemble
     result_chi_and_weights_ensemble = []
@@ -227,6 +245,7 @@ def multifoxs(all_files, tmpdir):
     print(call)
     if call.returncode: # multifoxs don't get right returnvalue
         print(f'ERROR: multifoxs failed', file=sys.stderr)
+        logging.ERROR(f'Multifoxs failed.')
         sys.exit(1)
 
     # Process with result from Multi_foxs
@@ -308,6 +327,7 @@ def gajoe(all_files, tmpdir):
     call.communicate()
     if call.returncode:
         print(f'ERROR: GAJOE failed', file=sys.stderr)
+        logging.ERROR(f'GAJOE failed.')
         sys.exit(1)
     # process results from gajoe (/GAOO1/curve_1/
     chi2 = None
@@ -338,11 +358,10 @@ def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
     for chi2, names_and_weights in result_chi_structure_weights:
         result_files = [file for file, _ in names_and_weights]
         result_weights = [weight for _, weight in names_and_weights]
-        sum_rmsd = 0
         if float(chi2) <= maximum:
             weighted_rmsd = compare_ensembles(run.selected_files, result_files, run.weights, result_weights)
             all_results.append((weighted_rmsd, chi2, names_and_weights))
-
+    logging.debug(f'Results from experiment {all_results}')
     run.results = all_results
     return run
 
@@ -352,8 +371,9 @@ def final_statistic(runs):
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
     rmsd = [result.get_best_result() for result in runs]
     print('Number of runs: ', len(runs))
+    logging.info(f'*****RMSDs| {len(runs)} |{rmsd}')
     print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
-
+    logging.info(f'*****FINAL RMSD| {np.mean(rmsd)}|{np.std(rmsd)}')
 
 def main():
     random.seed(1)
@@ -364,19 +384,29 @@ def main():
     test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
     result_chi_structure_weights = []
     all_runs = []
-    #logging.basicConfig(filename='result.log', level=logging.DEBUG)
-    logging.debug('This message should go to the log file')
+    hdlr = logging.FileHandler(f'{args.output}/result_{args.method}_n{args.n_files}_k{args.k_options}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
+    hdlr.setFormatter(SpecialFormatter())
+    logging.root.addHandler(hdlr)
+    logging.root.setLevel(logging.INFO)
+    logging.root.setLevel(logging.DEBUG)
+    logging.info(f'***Output from ensemble*** {strftime("%Y-%m-%d__%H-%M-%S", localtime())} \n')
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
-        print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat}' + Colors.ENDC, '\n')
+        logging.info(f'#Working directory: {tmpdir}')
+        logging.info(f'#Method: {args.method}')
+        print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat} \n' + Colors.ENDC, '\n')
+        logging.info(f'#Repeats: {args.repeat}')
         all_files = random.sample(list_pdb_file, args.n_files)
+        logging.info(f'#All_files: {args.n_files}')
         # copy to pds
         selected_files = random.sample(all_files, args.k_options)
         # copy to dats
         weights = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
         files_and_weights = list(zip(selected_files, weights))
+        logging.info(f'#Selected_files: {files_and_weights}')
         # copy to methods
         prepare_directory(all_files, selected_files, tmpdir, args.method)
+        logging.info(f'\n=============================\n')
         make_curve_for_experiment(files_and_weights, tmpdir)
         print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
         print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
