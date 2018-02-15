@@ -50,10 +50,8 @@ def run_script(method, args, path):
                            f'{args.k_value}', '--tolerance',f' {args.tolerance}', '--verbose',
                            '--method',f'{method}', '--preserve','--output',
                            f'{path}','-r',f'{args.repeat}'])
-                #print(call)
     if call.returncode:
         print(f'ERROR: script failed', file=sys.stderr)
-        #logging.ERROR(f'Script failed.')
         sys.exit(1)
 
 def work_with_result(path, method):
@@ -66,20 +64,17 @@ def work_with_result(path, method):
                 if line.startswith('*****FINAL RMSD'):
                     rmsd.append(line.split('|')[1])
                     std.append(line.split('|')[2])
-                #if line.startswith('#Method:'):
-                #    method.append((line.split(': ')[1]).rstrip())
+
     result_file = list(zip(method,rmsd,std))
     for method,rmsd,std in result_file:
-        logging.info(f'{method} , {rmsd} , {std}')
+        logging.info('{} , {:.3f} , {:.3f}'.format(method, float(rmsd), float(std)))
 
 def main():
     args = get_argument()
-    #os.chdir(args.mydirvariable)
     datum = strftime("%Y-%m-%d__%H-%M-%S", localtime())
     path = f'{args.output}/results/result_{datum}'
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
     method_list = ['eom', 'multifoxs']
-    print(*method_list)
     hdlr = logging.FileHandler(f'{args.output}/results/result_{datum}/final_result_n{args.n_value}_k{args.k_value}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
     hdlr.setFormatter(SpecialFormatter())
     logging.root.addHandler(hdlr)
@@ -89,7 +84,8 @@ def main():
     logging.info(f'#Total files : {args.n_value} \n')
     logging.info(f'#Selected files : {args.k_value} \n')
     logging.info(f'#Number of repetition: {args.repeat} \n')
-    logging.info(f'Directory with structures: {args.mydirvariable}')
+    os.path.abspath(args.mydirvariable)
+    logging.info(f'Directory with structures: {os.path.abspath(args.mydirvariable)}')
     logging.info('Method, RMSD, std')
 
     for method in method_list:
