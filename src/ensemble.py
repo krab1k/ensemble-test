@@ -333,7 +333,7 @@ def gajoe(all_files, tmpdir):
     chi2 = None
     structure_weight = []
     m = re.compile('^\s*\d+\)')
-    with open(tmpdir + '/results//GA001/curve_1/logFile_001_1.log') as file_gajoe:
+    with open(tmpdir + '/results/GA001/curve_1/logFile_001_1.log') as file_gajoe:
         for line in file_gajoe:
             if '-- Chi^2 : ' in line:
                 chi2 = float(line.split(':')[1])
@@ -361,7 +361,6 @@ def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
         if float(chi2) <= maximum:
             weighted_rmsd = compare_ensembles(run.selected_files, result_files, run.weights, result_weights)
             all_results.append((weighted_rmsd, chi2, names_and_weights))
-    logging.debug(f'Results from experiment {all_results}')
     run.results = all_results
     return run
 
@@ -371,7 +370,10 @@ def final_statistic(runs):
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
     rmsd = [result.get_best_result() for result in runs]
     print('Number of runs: ', len(runs))
-    logging.info(f'*****RMSDs| {len(runs)} |{rmsd}')
+    logging.info(f'*****All RMSDs| runs {len(runs)} |{rmsd}')
+    indexes = [i for i, x in enumerate(rmsd) if x == min(rmsd)]
+    print('Best RMSD {}, run {}'.format(min(rmsd), *indexes))
+    logging.info('Best RMSD {}, run {}'.format(min(rmsd), *indexes))
     print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
     logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd)}|{np.std(rmsd)}')
 
@@ -390,14 +392,18 @@ def main():
     logging.root.setLevel(logging.INFO)
     logging.root.setLevel(logging.DEBUG)
     logging.info(f'***Output from ensemble*** {strftime("%Y-%m-%d__%H-%M-%S", localtime())} \n')
+    logging.info(f'Assignment for experiment')
+    logging.info(f'#Method: {args.method}')
+    logging.info(f'#Repeats: {args.repeat}')
+    logging.info(f'#All_files: {args.n_files}')
+    logging.info(f'\n=============================\n')
+    logging.info(f'An assignment for each iteration\n')
+    logging.info(f'=============================\n')
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
         logging.info(f'#Working directory: {tmpdir}')
-        logging.info(f'#Method: {args.method}')
         print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat} \n' + Colors.ENDC, '\n')
-        logging.info(f'#Repeats: {args.repeat}')
         all_files = random.sample(list_pdb_file, args.n_files)
-        logging.info(f'#All_files: {args.n_files}')
         # copy to pds
         selected_files = random.sample(all_files, args.k_options)
         # copy to dats
@@ -406,7 +412,7 @@ def main():
         logging.info(f'#Selected_files: {files_and_weights}')
         # copy to methods
         prepare_directory(all_files, selected_files, tmpdir, args.method)
-        logging.info(f'\n=============================\n')
+        logging.info(f'\n-----------------------\n')
         make_curve_for_experiment(files_and_weights, tmpdir)
         print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
         print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
@@ -430,9 +436,9 @@ def main():
         if not args.preserve:
             shutil.rmtree(tmpdir)
 
-    for run in all_runs:
+    #for run in all_runs:
         run.print_result(args)
-
+        logging.info(f'\n=============================\n')
     final_statistic(all_runs)
 
 
