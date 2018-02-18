@@ -50,10 +50,10 @@ class Run:
             print(Colors.OKBLUE + '\nResults:\n ' + Colors.ENDC)
             for sumrmsd, chi2, data in self.results:
                 print(f'RMSD: {sumrmsd:.3f} Chi2: {chi2:.3f}\n')
-                logging.info(f'###RMSD: {sumrmsd} \n###CHI2: {chi2}')
+                logging.info(f'###result_RMSD: {sumrmsd:5.3f} \n###result_CHI2: {chi2:5.3f}')
                 for structure, weight in data:
                     print(f'structure: {structure} weight: {weight:.3f} \n')
-                    logging.info(f'#structure: {structure}| weight: {weight}')
+                    logging.info(f'#result_structure: {structure}| result_weight: {weight}')
 
     def get_best_result(self):
         return min(rmsd for rmsd, _, _ in self.results)
@@ -370,12 +370,15 @@ def final_statistic(runs):
     print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
     rmsd = [result.get_best_result() for result in runs]
     print('Number of runs: ', len(runs))
-    logging.info(f'*****All RMSDs| runs {len(runs)} |{rmsd}')
+    logging.info(f'*****All RMSDs| runs {len(runs)}:')
+    for number in rmsd:
+        logging.info(f'|{number:5.3f}|')
+
     indexes = [i for i, x in enumerate(rmsd) if x == min(rmsd)]
-    print('Best RMSD {}, run {}'.format(min(rmsd), *indexes))
-    logging.info('Best RMSD {}, run {}'.format(min(rmsd), *indexes))
+    print('Best RMSD {:5.3f}, run {}'.format(min(rmsd), *indexes))
+    logging.info('Best RMSD {:5.3f}, run {}'.format(min(rmsd), *indexes))
     print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
-    logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd)}|{np.std(rmsd)}')
+    logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd):5.3f}|{np.std(rmsd):5.3f}')
 
 def main():
     random.seed(1)
@@ -401,15 +404,19 @@ def main():
     logging.info(f'=============================\n')
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
+        logging.info(f'Task {i}')
         logging.info(f'#Working directory: {tmpdir}')
         print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat} \n' + Colors.ENDC, '\n')
         all_files = random.sample(list_pdb_file, args.n_files)
         # copy to pds
         selected_files = random.sample(all_files, args.k_options)
         # copy to dats
-        weights = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
-        files_and_weights = list(zip(selected_files, weights))
-        logging.info(f'#Selected_files: {files_and_weights}')
+        sample = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
+        weights = np.round(np.random.multinomial(1000, sample) / 1000, 3)
+        files_and_weights = list(zip(selected_files,weights))
+        logging.info(f'#Selected_files \n')
+        for file1, weight1 in files_and_weights:
+            logging.info(f'#structure {file1} | weight {weight1:5.3f}')
         # copy to methods
         prepare_directory(all_files, selected_files, tmpdir, args.method)
         logging.info(f'\n-----------------------\n')
@@ -428,7 +435,6 @@ def main():
 
         elif args.method == 'multifoxs':
             result_chi_structure_weights = multifoxs(all_files, tmpdir)
-
         run = process_result(args.tolerance, result_chi_structure_weights, run, tmpdir)
 
         all_runs.append(run)
