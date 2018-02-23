@@ -16,6 +16,8 @@ import pathlib
 import logging
 from time import localtime, strftime
 from comparison import compare_ensembles
+import threading
+
 
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
 
@@ -29,6 +31,36 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+class LogPipe(threading.Thread):
+
+    def __init__(self, level):
+        """Setup the object with a logger and a loglevel
+        and start the thread
+        """
+        threading.Thread.__init__(self)
+        self.daemon = False
+        self.level = level
+        self.fdRead, self.fdWrite = os.pipe()
+        self.pipeReader = os.fdopen(self.fdRead)
+        self.start()
+
+    def fileno(self):
+        """Return the write file descriptor of the pipe
+        """
+        return self.fdWrite
+
+    def run(self):
+        """Run the thread, logging everything.
+        """
+        for line in iter(self.pipeReader.readline, ''):
+            logging.log(self.level, line.strip('\n'))
+
+        self.pipeReader.close()
+
+    def close(self):
+        """Close the write end of the pipe.
+        """
+        os.close(self.fdWrite)
 
 class Run:
     def __init__(self, all_files, selected_files, weights, run, method):
@@ -42,11 +74,11 @@ class Run:
         self.results = []
 
     def print_result(self, args):
-        print(Colors.OKGREEN, 'Run:', self.run, Colors.ENDC)
-        print(Colors.OKBLUE + '\nSelected structure:\n' + Colors.ENDC)
-        for structure, weight in list(zip(self.selected_files, self.weights)):
-            print(f'structure: {structure} weight: {weight:.3f} \n')
-        if args.verbose:
+        if args.verbose == 3 or args.verbose == 2:
+            print(Colors.OKBLUE + '\nSelected structure:\n' + Colors.ENDC)
+            for structure, weight in list(zip(self.selected_files, self.weights)):
+                print(f'structure: {structure} weight: {weight:.3f} \n')
+        if args.verbose == 3 or args.verbose == 2:
             print(Colors.OKBLUE + '\nResults:\n ' + Colors.ENDC)
             for sumrmsd, chi2, data in self.results:
                 print(f'RMSD: {sumrmsd:.3f} Chi2: {chi2:.3f}\n')
@@ -89,8 +121,13 @@ def get_argument():
     parser.add_argument("-r", metavar='R', type=int,
                         dest="repeat", help="Number of repetitions",
                         default=1)
-    parser.add_argument("--verbose", help="increase output verbosity",
-                        action="store_true")
+    parser.add_argument("--verbose", type = int,
+                        help="increase output verbosity, value 0, 1, 2, 3",
+                        default=3)
+
+    parser.add_argument("--verbose_logfile", help="increase output verbosity",
+                       action="store_true")
+
 
     parser.add_argument("--tolerance", type=float, dest="tolerance",
                         help="pessimist (0) or optimist (0 < x <1) result",
@@ -146,10 +183,10 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
         else:
             print(all_files[i], '\t', end='')
     print('\n')
-    print('====================================================')
+    print('-------------------------------------------')
 
 
-def prepare_directory(all_files, selected_files, tmpdir, method):
+def prepare_directory(all_files, tmpdir, method, verbose_logfile):
     pathlib.Path(tmpdir + '/pdbs').mkdir(parents=True, exist_ok=True)
     if method == 'ensemble':
         pathlib.Path(tmpdir + '/pdbs/ensembles').mkdir(parents=True, exist_ok=True)
@@ -158,8 +195,20 @@ def prepare_directory(all_files, selected_files, tmpdir, method):
     pathlib.Path(tmpdir + '/method').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
     # prepare 'file'.dat and copy to /dats/
+    #logpipe = LogPipe(logging.INFO)
     for file in all_files:
-        return_value = subprocess.run(['foxs', f'{file}'])#, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if verbose_logfile:
+            logpipe = LogPipe(logging.DEBUG)
+            # fox sends stdout to stderr by default
+            logpipe_err = LogPipe(logging.DEBUG)
+            return_value = subprocess.run(['foxs', f'{file}'], stdout = logpipe,
+                                          stderr = logpipe_err)
+            logpipe.close()
+            logpipe_err.close()
+        else:
+            return_value = subprocess.run(['foxs', f'{file}'], stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE)
+
         if return_value.returncode:
             print(f'ERROR: Foxs failed.', file=sys.stderr)
             logging.ERROR(f'Foxs failed.')
@@ -176,9 +225,6 @@ def prepare_directory(all_files, selected_files, tmpdir, method):
 
 def make_curve_for_experiment(files_and_weights, tmpdir):
     files = [filename for filename, weight in files_and_weights]
-    print(Colors.OKBLUE + 'Data for experiment \n' + Colors.ENDC)
-    for data, weight in files_and_weights:
-        print('structure', data, 'weight', round(weight, 3), '\n')
     qs = np.linspace(0, 0.5, 501)
     curves = {}
     for filename in files:
@@ -202,11 +248,25 @@ def make_curve_for_experiment(files_and_weights, tmpdir):
     adderror("../data/exp.dat", tmpdir + '/method/curve')
 
 
-def ensemble_fit(all_files, tmpdir):
+def ensemble_fit(all_files, tmpdir, verbose, verbose_logfile):
     # RUN ensemble
     command = f'{ENSEMBLE_BINARY} -L -p {tmpdir}/pdbs/ensembles/ -n {len(all_files)} -m {tmpdir}/method/curve.modified.dat'
-    print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
-    call = subprocess.run([f'{ENSEMBLE_BINARY}','-L','-p',f'{tmpdir}/pdbs/ensembles/','-n',f'{len(all_files)}','-m',f'{tmpdir}/method/curve.modified.dat'], cwd=f'{tmpdir}/results/', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if verbose == 3:
+        print(Colors.OKBLUE + 'Command for ensemble fit \n' + Colors.ENDC, command, '\n')
+    if verbose_logfile:
+        logpipe = LogPipe(logging.DEBUG)
+        logpipe_err = LogPipe(logging.ERROR)
+        logging.info(f'Command for ensemble fit \n {command}')
+        call = subprocess.run([f'{ENSEMBLE_BINARY}','-L','-p',f'{tmpdir}/pdbs/ensembles/','-n',f'{len(all_files)}',
+                               '-m',f'{tmpdir}/method/curve.modified.dat'],
+                              cwd=f'{tmpdir}/results/', stdout=logpipe, stderr=logpipe_err)
+        logpipe.close()
+        logpipe_err.close()
+    else:
+        call = subprocess.run(
+            [f'{ENSEMBLE_BINARY}', '-L', '-p', f'{tmpdir}/pdbs/ensembles/', '-n', f'{len(all_files)}', '-m',
+             f'{tmpdir}/method/curve.modified.dat'],
+            cwd=f'{tmpdir}/results/', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if call.returncode:
         print(f'ERROR: ensemble failed', file=sys.stderr)
         logging.ERROR(f'Ensemble failed.')
@@ -237,12 +297,21 @@ def ensemble_fit(all_files, tmpdir):
     # ((chi2, [('mod10.pdb', 0.3), ('mod15.pdb', 0.7)]),(chi2(strucutre, weight),(strucutre, weight)))
 
 
-def multifoxs(all_files, tmpdir):
+def multifoxs(all_files, tmpdir, verbose_logfile):
     # RUN Multi_foxs
     files_for_multifoxs = [str(tmpdir + '/pdbs/' + file) for file in all_files]
-    print(files_for_multifoxs)
-    call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat', *files_for_multifoxs], cwd=f'{tmpdir}/results/', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    print(call)
+    if verbose_logfile:
+        logpipe = LogPipe(logging.DEBUG)
+        logpipe_err = LogPipe(logging.DEBUG)
+        call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
+                           *files_for_multifoxs], cwd=f'{tmpdir}/results/',
+                          stdout=logpipe, stderr=logpipe_err)
+        logpipe.close()
+        logpipe_err.close()
+    else:
+        call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
+                               *files_for_multifoxs], cwd=f'{tmpdir}/results/',
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if call.returncode: # multifoxs don't get right returnvalue
         print(f'ERROR: multifoxs failed', file=sys.stderr)
         logging.ERROR(f'Multifoxs failed.')
@@ -278,7 +347,7 @@ def multifoxs(all_files, tmpdir):
     return result
 
 
-def gajoe(all_files, tmpdir):
+def gajoe(all_files, tmpdir, verbose_logile):
     # Angular axis m01000.sax             Datafile m21000.sub         21-Jun-2001
     # .0162755E+00 0.644075E+03 0.293106E+02
     with open(tmpdir + '/method/curve_gajoe.dat', 'w') as file_gajoe:
@@ -322,9 +391,22 @@ def gajoe(all_files, tmpdir):
                     lineformat = ff.FortranRecordWriter('(1E14.6)')
                     b = lineformat.write([data1])
                     file1.write(f'{b}\n')
-    p1 = subprocess.Popen(['yes'], stdout=subprocess.PIPE)
-    call = subprocess.Popen(['gajoe', f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom', '-t=5'], cwd=f'{tmpdir}/results/', stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    call.communicate()
+    if verbose_logile:
+        logpipe = LogPipe(logging.DEBUG)
+        logpipe_err = LogPipe(logging.ERROR)
+        p1 = subprocess.Popen(['yes'], stdout=subprocess.PIPE)
+        call = subprocess.Popen(['gajoe', f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom',
+                             '-t=5'], cwd=f'{tmpdir}/results/', stdin=p1.stdout,
+                            stdout=logpipe, stderr=logpipe_err)
+        call.communicate()
+        logpipe.close()
+        logpipe_err.close()
+    else:
+        p1 = subprocess.Popen(['yes'], stdout=subprocess.PIPE)
+        call = subprocess.Popen(['gajoe', f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom',
+                                 '-t=5'], cwd=f'{tmpdir}/results/', stdin=p1.stdout,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        call.communicate()
     if call.returncode:
         print(f'ERROR: GAJOE failed', file=sys.stderr)
         logging.ERROR(f'GAJOE failed.')
@@ -365,19 +447,23 @@ def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
     return run
 
 
-def final_statistic(runs):
-    print('====================================================')
-    print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
+def final_statistic(runs, verbose ):
+    if verbose == 2 or verbose == 1 or verbose == 3:
+        print('====================================================')
+        print('====================================================')
+        print(Colors.HEADER + '\nFINAL STATISTICS \n' + Colors.ENDC)
     rmsd = [result.get_best_result() for result in runs]
-    print('Number of runs: ', len(runs))
+    if verbose == 2 or verbose == 1 or verbose == 3:
+        print('Number of runs: ', len(runs))
     logging.info(f'*****All RMSDs| runs {len(runs)}:')
     for number in rmsd:
         logging.info(f'|{number:5.3f}|')
 
     indexes = [i for i, x in enumerate(rmsd) if x == min(rmsd)]
-    print('Best RMSD {:5.3f}, run {}'.format(min(rmsd), *indexes))
+    if verbose == 2 or verbose == 1 or verbose == 3:
+        print('Best RMSD {:5.3f}, run {}'.format(min(rmsd), *indexes))
+        print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
     logging.info('Best RMSD {:5.3f}, run {}'.format(min(rmsd), *indexes))
-    print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
     logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd):5.3f}|{np.std(rmsd):5.3f}')
 
 def main():
@@ -394,6 +480,7 @@ def main():
     logging.root.addHandler(hdlr)
     logging.root.setLevel(logging.INFO)
     logging.root.setLevel(logging.DEBUG)
+    print(args.verbose)
     logging.info(f'***Output from ensemble*** {strftime("%Y-%m-%d__%H-%M-%S", localtime())} \n')
     logging.info(f'Assignment for experiment')
     logging.info(f'#Method: {args.method}')
@@ -401,12 +488,16 @@ def main():
     logging.info(f'#All_files: {args.n_files}')
     logging.info(f'\n=============================\n')
     logging.info(f'An assignment for each iteration\n')
-    logging.info(f'=============================\n')
+    logging.info(f'----------------------------------\n')
+    if args.verbose == 3 or args.verbose == 2 or args.verbose == 1:
+        print(f' \n EXPERIMENT  {strftime("%Y-%m-%d__%H-%M-%S", localtime())}')
     for i in range(args.repeat):
         tmpdir = tempfile.mkdtemp()
         logging.info(f'Task {i}')
         logging.info(f'#Working directory: {tmpdir}')
-        print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat} \n' + Colors.ENDC, '\n')
+        if args.verbose ==  3 or args.verbose == 2:
+            print('====================================================')
+            print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat} \n' + Colors.ENDC, '\n')
         all_files = random.sample(list_pdb_file, args.n_files)
         # copy to pds
         selected_files = random.sample(all_files, args.k_options)
@@ -418,23 +509,25 @@ def main():
         for file1, weight1 in files_and_weights:
             logging.info(f'#structure {file1} | weight {weight1:5.3f}')
         # copy to methods
-        prepare_directory(all_files, selected_files, tmpdir, args.method)
-        logging.info(f'\n-----------------------\n')
+        prepare_directory(all_files, tmpdir, args.method, args.verbose_logfile)
+        logging.info(f'\n==========================\n')
         make_curve_for_experiment(files_and_weights, tmpdir)
-        print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
-        print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
-        print(args.method, '\n')
-        if args.verbose:
+        if args.verbose == 3:
+            print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
+            print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
+            print(args.method, '\n')
+        if args.verbose == 3:
             print_parameters_verbose(args, list_pdb_file, all_files)
         run = Run(all_files, selected_files, weights, i + 1, args.method)
         if args.method == 'ensemble':
-            result_chi_structure_weights = ensemble_fit(all_files, tmpdir)
+            result_chi_structure_weights = ensemble_fit(all_files, tmpdir,
+                                                        args.verbose, args.verbose_logfile)
 
         elif args.method == 'eom':
-            result_chi_structure_weights = gajoe(all_files, tmpdir)
+            result_chi_structure_weights = gajoe(all_files, tmpdir, args.verbose_logfile)
 
         elif args.method == 'multifoxs':
-            result_chi_structure_weights = multifoxs(all_files, tmpdir)
+            result_chi_structure_weights = multifoxs(all_files, tmpdir, args.verbose_logfile)
         run = process_result(args.tolerance, result_chi_structure_weights, run, tmpdir)
 
         all_runs.append(run)
@@ -445,7 +538,7 @@ def main():
     #for run in all_runs:
         run.print_result(args)
         logging.info(f'\n=============================\n')
-    final_statistic(all_runs)
+    final_statistic(all_runs, args.verbose)
 
 
 if __name__ == '__main__':

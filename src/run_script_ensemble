@@ -15,6 +15,7 @@ import pathlib
 import logging
 from time import localtime, strftime
 from comparison import compare_ensembles
+import threading
 
 class SpecialFormatter(logging.Formatter):
     FORMATS = {logging.DEBUG : logging._STYLES['{'][0]("DEBUG: {message}"),
@@ -36,20 +37,31 @@ def get_argument():
                         default=0)
     parser.add_argument("-d", "--dir", dest="mydirvariable",
                         help="Choose dir", metavar="DIR", required=True)
-    parser.add_argument("--verbose", help="increase output verbosity",
+    parser.add_argument("--verbose", type=int,
+                        help="increase output verbosity, value 0, 1, 2, 3",
+                        default=3)
+
+    parser.add_argument("--verbose_logfile", help="increase output verbosity",
                         action="store_true")
+
     parser.add_argument("--preserve", help="preserve temporary directory",
                         action="store_true")
     parser.add_argument("--output", help="choose directory to save output",
                         metavar="DIR", dest="output")
     return parser.parse_args()
 
-def run_script(method, args, path):
-    print(args)
-    call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
-                           f'{args.k_value}', '--tolerance',f' {args.tolerance}', '--verbose',
-                           '--method',f'{method}', '--preserve','--output',
-                           f'{path}','-r',f'{args.repeat}'])
+def run_script(method, args, path, verbose_logfile, verbose):
+    if verbose_logfile:
+        call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
+                           f'{args.k_value}', '--tolerance',f' {args.tolerance}', '--verbose', f'{verbose}',
+                           '--method',f'{method}', '--preserve','--output', f'{path}','-r',f'{args.repeat}',
+                               '--verbose_logfile'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    else:
+        call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
+                               f'{args.k_value}', '--tolerance', f' {args.tolerance}', '--verbose',f'{verbose}',
+                               '--method', f'{method}', '--preserve', '--output',
+                               f'{path}', '-r', f'{args.repeat}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if call.returncode:
         print(f'ERROR: script failed', file=sys.stderr)
         sys.exit(1)
@@ -89,7 +101,7 @@ def main():
     logging.info('Method, RMSD, std')
 
     for method in method_list:
-        run_script(method, args, path)
+        run_script(method, args, path, args.verbose_logfile, args.verbose)
     work_with_result(path, method_list)
 if __name__ == '__main__':
     main()
