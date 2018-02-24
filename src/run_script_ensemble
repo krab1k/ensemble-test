@@ -39,7 +39,7 @@ def get_argument():
                         help="Choose dir", metavar="DIR", required=True)
     parser.add_argument("--verbose", type=int,
                         help="increase output verbosity, value 0, 1, 2, 3",
-                        default=3)
+                        default=0)
 
     parser.add_argument("--verbose_logfile", help="increase output verbosity",
                         action="store_true")
@@ -53,15 +53,15 @@ def get_argument():
 def run_script(method, args, path, verbose_logfile, verbose):
     if verbose_logfile:
         call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
-                           f'{args.k_value}', '--tolerance',f' {args.tolerance}', '--verbose', f'{verbose}',
+                           f'{args.k_value}', '--tolerance',f' {args.tolerance}',
                            '--method',f'{method}', '--preserve','--output', f'{path}','-r',f'{args.repeat}',
-                               '--verbose_logfile'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                               '--verbose_logfile', '--verbose', f'{verbose}'])
 
     else:
         call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
                                f'{args.k_value}', '--tolerance', f' {args.tolerance}', '--verbose',f'{verbose}',
                                '--method', f'{method}', '--preserve', '--output',
-                               f'{path}', '-r', f'{args.repeat}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                               f'{path}', '-r', f'{args.repeat}'])
     if call.returncode:
         print(f'ERROR: script failed', file=sys.stderr)
         sys.exit(1)

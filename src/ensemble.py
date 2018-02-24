@@ -123,7 +123,7 @@ def get_argument():
                         default=1)
     parser.add_argument("--verbose", type = int,
                         help="increase output verbosity, value 0, 1, 2, 3",
-                        default=3)
+                        default=0)
 
     parser.add_argument("--verbose_logfile", help="increase output verbosity",
                        action="store_true")
@@ -480,7 +480,6 @@ def main():
     logging.root.addHandler(hdlr)
     logging.root.setLevel(logging.INFO)
     logging.root.setLevel(logging.DEBUG)
-    print(args.verbose)
     logging.info(f'***Output from ensemble*** {strftime("%Y-%m-%d__%H-%M-%S", localtime())} \n')
     logging.info(f'Assignment for experiment')
     logging.info(f'#Method: {args.method}')
