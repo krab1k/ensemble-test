@@ -47,7 +47,11 @@ def get_argument():
     parser.add_argument("--preserve", help="preserve temporary directory",
                         action="store_true")
     parser.add_argument("--output", help="choose directory to save output",
-                        metavar="DIR", dest="output")
+                        metavar="DIR", dest="output", required=True)
+
+    parser.add_argument("--experimentdata", help="choose file for adderror",
+                        metavar="DIR", dest="experimentdata",required=True)
+
     return parser.parse_args()
 
 def run_script(method, args, path, verbose_logfile, verbose):
@@ -55,13 +59,14 @@ def run_script(method, args, path, verbose_logfile, verbose):
         call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
                            f'{args.k_value}', '--tolerance',f' {args.tolerance}',
                            '--method',f'{method}', '--preserve','--output', f'{path}','-r',f'{args.repeat}',
-                               '--verbose_logfile', '--verbose', f'{verbose}'])
+                               '--verbose_logfile', '--verbose', f'{verbose}', '--experimentdata',
+                               f'{args.experimentdata}'])
 
     else:
         call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
                                f'{args.k_value}', '--tolerance', f' {args.tolerance}', '--verbose',f'{verbose}',
                                '--method', f'{method}', '--preserve', '--output',
-                               f'{path}', '-r', f'{args.repeat}'])
+                               f'{path}', '-r', f'{args.repeat}','--experimentdata', f'{args.experimentdata}'])
     if call.returncode:
         print(f'ERROR: script failed', file=sys.stderr)
         sys.exit(1)

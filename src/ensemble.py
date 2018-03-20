@@ -82,11 +82,12 @@ class Run:
             print(Colors.OKBLUE + '\nResults:\n ' + Colors.ENDC)
             for sumrmsd, chi2, data in self.results:
                 print(f'RMSD: {sumrmsd:.3f} Chi2: {chi2:.3f}\n')
-                logging.info(f'###result_RMSD: {sumrmsd:5.3f} \n###result_CHI2: {chi2:5.3f}')
                 for structure, weight in data:
                     print(f'structure: {structure} weight: {weight:.3f} \n')
-                    logging.info(f'#result_structure: {structure}| result_weight: {weight}')
-
+        for sumrmsd, chi2, data in self.results:
+            logging.info(f'###result_RMSD: {sumrmsd:5.3f} \n###result_CHI2: {chi2:5.3f}')
+            for structure, weight in data:
+                logging.info(f'#result_structure: {structure}| result_weight: {weight}')
     def get_best_result(self):
         return min(rmsd for rmsd, _, _ in self.results)
 
@@ -137,10 +138,16 @@ def get_argument():
                         action="store_true")
 
     parser.add_argument("--method", help="choose method ensamble, eom, foxs",
-                        choices=['ensemble', 'eom', 'multifoxs'])
+                        choices=['ensemble', 'eom', 'multifoxs'], required=True)
+
 
     parser.add_argument("--output", help="choose directory to save output",
-                        metavar = "DIR", dest="output")
+                        metavar = "DIR", dest="output", required=True)
+
+
+    parser.add_argument("--experimentdata", help="choose file for adderror",
+                        metavar = "DIR", dest="experimentdata",required=True)
+
 
     return parser.parse_args()
 
@@ -156,18 +163,18 @@ def find_pdb_file(mydirvariable):
     return pdb_files
 
 
-def test_argument(n_files, k_options, list_pdb_file, tolerance):
-    if len(list_pdb_file) < n_files:
+def test_argument(args, list_pdb_file):
+    if len(list_pdb_file) < args.n_files:
         print(Colors.WARNING + "Number of pdb files is ONLY" + Colors.ENDC, len(list_pdb_file), '\n')
-        logging.ERROR(f'Number of pdb files is ONLY {len(list_pdb_file)}')
+        logging.error(f'Number of pdb files is ONLY {len(list_pdb_file)}')
         sys.exit(1)
-    if k_options > n_files:
-        print(Colors.WARNING + "Number of selected structure is ONLY" + Colors.ENDC, n_files, '\n')
-        logging.ERROR(f'Number of selected structure is ONLY { n_files}')
+    if args.k_options > args.n_files:
+        print(Colors.WARNING + "Number of selected structure is ONLY" + Colors.ENDC, args.n_files, '\n')
+        logging.error(f'Number of selected structure is ONLY { args.n_files}')
         sys.exit(1)
-    if tolerance > 1:
+    if args.tolerance > 1:
         print('Tolerance should be less then 1.')
-        logging.ERROR('Tolerance should be less then 1.')
+        logging.error('Tolerance should be less then 1.')
         sys.exit(1)
 
 
@@ -208,10 +215,9 @@ def prepare_directory(all_files, tmpdir, method, verbose_logfile):
         else:
             return_value = subprocess.run(['foxs', f'{file}'], stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE)
-
         if return_value.returncode:
             print(f'ERROR: Foxs failed.', file=sys.stderr)
-            logging.ERROR(f'Foxs failed.')
+            logging.error(f'Foxs failed.')
             sys.exit(1)
         shutil.copy(file + '.dat', f'{tmpdir}/dats/')
 
@@ -223,7 +229,7 @@ def prepare_directory(all_files, tmpdir, method, verbose_logfile):
         shutil.copy(file, f'{tmpdir}/pdbs/')
 
 
-def make_curve_for_experiment(files_and_weights, tmpdir):
+def make_curve_for_experiment(files_and_weights, tmpdir, experimentdata):
     files = [filename for filename, weight in files_and_weights]
     qs = np.linspace(0, 0.5, 501)
     curves = {}
@@ -245,7 +251,7 @@ def make_curve_for_experiment(files_and_weights, tmpdir):
         for q, y in zip(qs, result_curve):
             file.write(f'{q:5.3f} {y} 0\n')
 
-    adderror("../data/exp.dat", tmpdir + '/method/curve')
+    adderror(experimentdata, tmpdir + '/method/curve')
 
 
 def ensemble_fit(all_files, tmpdir, verbose, verbose_logfile):
@@ -269,7 +275,7 @@ def ensemble_fit(all_files, tmpdir, verbose, verbose_logfile):
             cwd=f'{tmpdir}/results/', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if call.returncode:
         print(f'ERROR: ensemble failed', file=sys.stderr)
-        logging.ERROR(f'Ensemble failed.')
+        logging.error(f'Ensemble failed.')
 
         sys.exit(1)
     # Process with result from ensemble
@@ -314,7 +320,7 @@ def multifoxs(all_files, tmpdir, verbose_logfile):
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if call.returncode: # multifoxs don't get right returnvalue
         print(f'ERROR: multifoxs failed', file=sys.stderr)
-        logging.ERROR(f'Multifoxs failed.')
+        logging.error(f'Multifoxs failed.')
         sys.exit(1)
 
     # Process with result from Multi_foxs
@@ -409,7 +415,7 @@ def gajoe(all_files, tmpdir, verbose_logile):
         call.communicate()
     if call.returncode:
         print(f'ERROR: GAJOE failed', file=sys.stderr)
-        logging.ERROR(f'GAJOE failed.')
+        logging.error(f'GAJOE failed.')
         sys.exit(1)
     # process results from gajoe (/GAOO1/curve_1/
     chi2 = None
@@ -472,7 +478,7 @@ def main():
     args = get_argument()
     os.chdir(args.mydirvariable)
     list_pdb_file = find_pdb_file(args.mydirvariable)
-    test_argument(args.n_files, args.k_options, list_pdb_file, args.tolerance)
+    test_argument(args, list_pdb_file)
     result_chi_structure_weights = []
     all_runs = []
     hdlr = logging.FileHandler(f'{args.output}/result_{args.method}_n{args.n_files}_k{args.k_options}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
@@ -510,7 +516,7 @@ def main():
         # copy to methods
         prepare_directory(all_files, tmpdir, args.method, args.verbose_logfile)
         logging.info(f'\n==========================\n')
-        make_curve_for_experiment(files_and_weights, tmpdir)
+        make_curve_for_experiment(files_and_weights, tmpdir, args.experimentdata)
         if args.verbose == 3:
             print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
             print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
