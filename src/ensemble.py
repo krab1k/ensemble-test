@@ -138,7 +138,7 @@ def get_argument():
                         action="store_true")
 
     parser.add_argument("--method", help="choose method ensamble, eom, foxs",
-                        choices=['ensemble', 'eom', 'multifoxs'], required=True)
+                        choices=['ensemble', 'eom', 'multifoxs', 'mes'], required=True)
 
 
     parser.add_argument("--output", help="choose directory to save output",
@@ -219,7 +219,21 @@ def prepare_directory(all_files, tmpdir, method, verbose_logfile):
             print(f'ERROR: Foxs failed.', file=sys.stderr)
             logging.error(f'Foxs failed.')
             sys.exit(1)
+
         shutil.copy(file + '.dat', f'{tmpdir}/dats/')
+
+        if method == 'mes':
+            dats_files = []
+            files = listdir(tmpdir + '/dats/')
+            for line in files:
+                line = line.rstrip()
+                if re.search('.dat$', line):
+                    dats_files.append(line)
+            lines = []
+            for file in dats_files:
+                with open(tmpdir + '/dats/' + file, 'w') as f:
+                    f.writelines(lines[:0] + lines[2:])
+                    shutil.copy(file, f'{tmpdir}/method/')
 
     if method == 'ensemble':  # format 01.pdb, 02.pdb as input for ensemble
         for i, f in enumerate(all_files, start=1):
@@ -437,6 +451,63 @@ def gajoe(all_files, tmpdir, verbose_logile):
     return [(chi2, structure_weight)]
     # ([chi2,[(structure, weight), (structure,weight), (structure, weight),... ], [chi2,(),...])
 
+def mes(all_files, tmpdir, verbose_logfile):
+    #Run MES
+
+    # add empty line to curve,modified.dat
+    with open(tmpdir + '/method/curve.modified.dat', 'r+') as f:
+        line = ''
+        content = f.read()
+        f.seek(0, 0)
+        f.write(line.rstrip('\r\n') + '\n' + content)
+    # remove second line from file.dat, program accepts just one line at the beginning
+
+    with open(tmpdir + '/method/filelist' , 'w') as file_mes:
+        file_mes.write('curve.modified.dat' + '\n')
+        for file in all_files:
+            file_mes.write(file + '.dat' + '\n')
+        # remove second line from saxs file
+            call = subprocess.run(['sed' ,'-i','2d', f'{tmpdir}/method/' + f'{file}' + '.dat'])
+            if call.returncode:
+                print(f'ERROR: script failed', file=sys.stderr)
+                logging.error(f'script failed.')
+                sys.exit(1)
+
+
+    logpipe = LogPipe(logging.DEBUG)
+    logpipe_err = LogPipe(logging.ERROR)
+
+    if verbose_logfile:
+        with open(f'{tmpdir}/method/result_mes', 'a') as file_mes:
+            call = subprocess.run(['/home/petra/Dokumenty/SAXS/mes/weights/mes', f'{tmpdir}/method/filelist'],
+                                  cwd=f'{tmpdir}/method/',
+                                  stdout = file_mes, stderr=logpipe_err)
+    else:
+        with open(f'{tmpdir}/method/result_mes', 'a') as file_mes:
+            call = subprocess.run(['/home/petra/Dokumenty/SAXS/mes/weights/mes', f'{tmpdir}/method/filelist'],
+                                  cwd=f'{tmpdir}/method/',
+                                  stdout = file_mes, stderr=subprocess.PIPE)
+    logpipe.close()
+    logpipe_err.close()
+
+    if call.returncode:
+        print(f'ERROR: mes failed', file=sys.stderr)
+        logging.error(f'mes failed.')
+        sys.exit(1)
+
+    result = []
+    chi2 = 0
+    weight_strucutre = []
+    with open(tmpdir + '/method/result_mes') as file_mes:
+        for line in file_mes:
+            if line.startswith('  best xi'):
+                chi2 = float(line.split(':')[1])
+            if re.search('\d.pdb.dat', line):
+                structure =  line.split('.')[0].strip() + '.pdb'
+                weight = float(line.split(' ')[5].rstrip())
+                weight_strucutre.append((structure, weight))
+        result.append((chi2, weight_strucutre))
+    return result
 
 def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
     minimum = min(chi2 for chi2, _ in result_chi_structure_weights)
@@ -453,7 +524,7 @@ def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
     return run
 
 
-def final_statistic(runs, verbose ):
+def final_statistic(runs, verbose):
     if verbose == 2 or verbose == 1 or verbose == 3:
         print('====================================================')
         print('====================================================')
@@ -533,6 +604,10 @@ def main():
 
         elif args.method == 'multifoxs':
             result_chi_structure_weights = multifoxs(all_files, tmpdir, args.verbose_logfile)
+
+        elif args.method == 'mes':
+            result_chi_structure_weights = mes(all_files, tmpdir, args.verbose_logfile)
+
         run = process_result(args.tolerance, result_chi_structure_weights, run, tmpdir)
 
         all_runs.append(run)
@@ -540,7 +615,7 @@ def main():
         if not args.preserve:
             shutil.rmtree(tmpdir)
 
-    #for run in all_runs:
+    for run in all_runs:
         run.print_result(args)
         logging.info(f'\n=============================\n')
     final_statistic(all_runs, args.verbose)
