@@ -91,7 +91,7 @@ def main():
     datum = strftime("%Y-%m-%d__%H-%M-%S", localtime())
     path = f'{args.output}/results/result_{datum}'
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
-    method_list = ['eom', 'multifoxs']
+    method_list = ['eom', 'multifoxs', 'mes']
     hdlr = logging.FileHandler(f'{args.output}/results/result_{datum}/final_result_n{args.n_value}_k{args.k_value}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
     hdlr.setFormatter(SpecialFormatter())
     logging.root.addHandler(hdlr)

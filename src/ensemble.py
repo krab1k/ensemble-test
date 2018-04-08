@@ -615,9 +615,10 @@ def main():
         if not args.preserve:
             shutil.rmtree(tmpdir)
 
-    for run in all_runs:
+    #for run in all_runs:
         run.print_result(args)
         logging.info(f'\n=============================\n')
+
     final_statistic(all_runs, args.verbose)
 
 
