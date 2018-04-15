@@ -3,7 +3,7 @@
 import os
 import pathlib
 
-#pathlib.Path('.'+'/files').mkdir(parents=True, exist_ok=True)
+# pathlib.Path('.'+'/files').mkdir(parents=True, exist_ok=True)
 name = ''
 with open('final.pdb') as file:
     for line in file:

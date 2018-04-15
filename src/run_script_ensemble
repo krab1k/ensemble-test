@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-#run script for an experiment with ensemble
+# run script for an experiment with ensemble
 import os
 import random
 import re
@@ -17,15 +17,18 @@ from time import localtime, strftime
 from comparison import compare_ensembles
 import threading
 
+
 class SpecialFormatter(logging.Formatter):
-    FORMATS = {logging.DEBUG : logging._STYLES['{'][0]("DEBUG: {message}"),
-           logging.ERROR : logging._STYLES['{'][0]("{module} : {lineno}: {message}"),
-           logging.INFO : logging._STYLES['{'][0]("{message}"),
-           'DEFAULT' : logging._STYLES['{'][0](" {message}")}
+    FORMATS = {logging.DEBUG: logging._STYLES['{'][0]("DEBUG: {message}"),
+               logging.ERROR: logging._STYLES['{'][0]("{module} : {lineno}: {message}"),
+               logging.INFO: logging._STYLES['{'][0]("{message}"),
+               'DEFAULT': logging._STYLES['{'][0](" {message}")}
+
     def format(self, record):
         # Ugly. Should be better
         self._style = self.FORMATS.get(record.levelno, self.FORMATS['DEFAULT'])
         return logging.Formatter.format(self, record)
+
 
 def get_argument():
     parser = ArgumentParser()
@@ -50,26 +53,28 @@ def get_argument():
                         metavar="DIR", dest="output", required=True)
 
     parser.add_argument("--experimentdata", help="choose file for adderror",
-                        metavar="DIR", dest="experimentdata",required=True)
+                        metavar="DIR", dest="experimentdata", required=True)
 
     return parser.parse_args()
+
 
 def run_script(method, args, path, verbose_logfile, verbose):
     if verbose_logfile:
         call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
-                           f'{args.k_value}', '--tolerance',f' {args.tolerance}',
-                           '--method',f'{method}', '--preserve','--output', f'{path}','-r',f'{args.repeat}',
+                               f'{args.k_value}', '--tolerance', f' {args.tolerance}',
+                               '--method', f'{method}', '--preserve', '--output', f'{path}', '-r', f'{args.repeat}',
                                '--verbose_logfile', '--verbose', f'{verbose}', '--experimentdata',
                                f'{args.experimentdata}'])
 
     else:
         call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
-                               f'{args.k_value}', '--tolerance', f' {args.tolerance}', '--verbose',f'{verbose}',
+                               f'{args.k_value}', '--tolerance', f' {args.tolerance}', '--verbose', f'{verbose}',
                                '--method', f'{method}', '--preserve', '--output',
-                               f'{path}', '-r', f'{args.repeat}','--experimentdata', f'{args.experimentdata}'])
+                               f'{path}', '-r', f'{args.repeat}', '--experimentdata', f'{args.experimentdata}'])
     if call.returncode:
         print(f'ERROR: script failed', file=sys.stderr)
         sys.exit(1)
+
 
 def work_with_result(path, method):
     rmsd = []
@@ -82,9 +87,10 @@ def work_with_result(path, method):
                     rmsd.append(line.split('|')[1])
                     std.append(line.split('|')[2])
 
-    result_file = list(zip(method,rmsd,std))
-    for method,rmsd,std in result_file:
+    result_file = list(zip(method, rmsd, std))
+    for method, rmsd, std in result_file:
         logging.info('{} , {:.3f} , {:.3f}'.format(method, float(rmsd), float(std)))
+
 
 def main():
     args = get_argument()
@@ -92,7 +98,8 @@ def main():
     path = f'{args.output}/results/result_{datum}'
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
     method_list = ['eom', 'multifoxs', 'mes']
-    hdlr = logging.FileHandler(f'{args.output}/results/result_{datum}/final_result_n{args.n_value}_k{args.k_value}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
+    hdlr = logging.FileHandler(
+        f'{args.output}/results/result_{datum}/final_result_n{args.n_value}_k{args.k_value}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
     hdlr.setFormatter(SpecialFormatter())
     logging.root.addHandler(hdlr)
     logging.root.setLevel(logging.INFO)
@@ -108,5 +115,7 @@ def main():
     for method in method_list:
         run_script(method, args, path, args.verbose_logfile, args.verbose)
     work_with_result(path, method_list)
+
+
 if __name__ == '__main__':
     main()
