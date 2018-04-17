@@ -105,7 +105,7 @@ class SpecialFormatter(logging.Formatter):
 
 
 
-def get_argument():
+def set_argument():
     parser = ArgumentParser()
     parser.add_argument("-d", "--dir", dest="mydirvariable",
                         help="Choose dir", metavar="DIR", required=True)
@@ -139,8 +139,7 @@ def get_argument():
                         action="store_true")
 
     parser.add_argument("--method", help="choose method ensamble, eom, foxs",
-                        choices=['ensemble', 'eom', 'multifoxs', 'mes'], required=True)
-
+                        choices=get_saxs_methods(), required=True)
 
     parser.add_argument("--output", help="choose directory to save output",
                         metavar = "DIR", dest="output", required=True)
@@ -200,6 +199,7 @@ def prepare_directory(all_files, tmpdir, method, verbose_logfile):
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
     # prepare 'file'.dat and copy to /dats/
     # logpipe = LogPipe(logging.INFO)
+
     for file in all_files:
         if verbose_logfile:
             logpipe = LogPipe(logging.DEBUG)
@@ -279,9 +279,10 @@ def final_statistic(runs, verbose):
     logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd):5.3f}|{np.std(rmsd):5.3f}')
 
 def main():
+    methods = get_saxs_methods()
     random.seed(1)
     np.random.seed(1)
-    args = get_argument()
+    args = set_argument()
     os.chdir(args.mydirvariable)
     list_pdb_file = find_pdb_file(args.mydirvariable)
     test_argument(args, list_pdb_file)
@@ -330,13 +331,10 @@ def main():
         if args.verbose == 3:
             print_parameters_verbose(args, list_pdb_file, all_files)
         run = Run(all_files, selected_files, weights, i + 1, args.method)
-        methods = get_saxs_methods()
-        for method in methods:
-            m = importlib.import_module('methods_saxs.' + method)
-            m.prepare_data(all_files, tmpdir, method, args.verbose_logfile)
-            m.make_experiment(all_files, tmpdir, args.verbose, args.verbose_logfile, method)
-            result_chi_structure_weights = m.collect_result(tmpdir)
-
+        m = importlib.import_module('methods_saxs.' + args.method)
+        m.prepare_data(all_files, tmpdir, args.method, args.verbose_logfile)
+        m.make_experiment(all_files, tmpdir, args.verbose, args.verbose_logfile, args.method)
+        result_chi_structure_weights = m.collect_results(tmpdir, all_files)
         run = process_result(args.tolerance, result_chi_structure_weights, run, tmpdir)
 
         all_runs.append(run)

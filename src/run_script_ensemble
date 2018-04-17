@@ -2,21 +2,14 @@
 # -*- coding: utf-8 -*-
 # run script for an experiment with ensemble
 import os
-import random
-import re
-import shutil
 import subprocess
 import sys
-import tempfile
 from argparse import ArgumentParser
 from os import listdir
-import numpy as np
 import pathlib
 import logging
 from time import localtime, strftime
-from comparison import compare_ensembles
-import threading
-
+import pkgutil
 
 class SpecialFormatter(logging.Formatter):
     FORMATS = {logging.DEBUG: logging._STYLES['{'][0]("DEBUG: {message}"),
@@ -60,19 +53,20 @@ def get_argument():
 
 def run_script(method, args, path, verbose_logfile, verbose):
     if verbose_logfile:
-        call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
-                               f'{args.k_value}', '--tolerance', f' {args.tolerance}',
-                               '--method', f'{method}', '--preserve', '--output', f'{path}', '-r', f'{args.repeat}',
+        call = subprocess.run([f'./saxs_experiment.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
+                               f'{args.k_value}', '--tolerance', f' {args.tolerance}'
+                               , '--preserve', '--output', f'{path}', '-r', f'{args.repeat}',
                                '--verbose_logfile', '--verbose', f'{verbose}', '--experimentdata',
-                               f'{args.experimentdata}'])
+                               f'{args.experimentdata}','--method', f'{method}'])
 
     else:
-        call = subprocess.run([f'./ensemble.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
+        call = subprocess.run([f'./saxs_experiment.py', '-d', f'{args.mydirvariable}', '-n', f'{args.n_value}', '-k',
                                f'{args.k_value}', '--tolerance', f' {args.tolerance}', '--verbose', f'{verbose}',
-                               '--method', f'{method}', '--preserve', '--output',
-                               f'{path}', '-r', f'{args.repeat}', '--experimentdata', f'{args.experimentdata}'])
+                                '--preserve', '--output',
+                               f'{path}', '-r', f'{args.repeat}', '--experimentdata', f'{args.experimentdata}',
+                               '--method', f'{method}'])
     if call.returncode:
-        print(f'ERROR: script failed', file=sys.stderr)
+        print(f'ERROR: run_script failed', file=sys.stderr)
         sys.exit(1)
 
 
@@ -91,13 +85,16 @@ def work_with_result(path, method):
     for method, rmsd, std in result_file:
         logging.info('{} , {:.3f} , {:.3f}'.format(method, float(rmsd), float(std)))
 
+def get_saxs_methods():
+    return list(m.name for m in pkgutil.iter_modules(['/home/petra/Dokumenty/ensemble-test/src/methods_saxs']))
 
 def main():
+    methods = get_saxs_methods()
     args = get_argument()
     datum = strftime("%Y-%m-%d__%H-%M-%S", localtime())
     path = f'{args.output}/results/result_{datum}'
     pathlib.Path(path).mkdir(parents=True, exist_ok=True)
-    method_list = ['eom', 'multifoxs', 'mes']
+    #method_list = ['eom', 'multifoxs', 'mes']
     hdlr = logging.FileHandler(
         f'{args.output}/results/result_{datum}/final_result_n{args.n_value}_k{args.k_value}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
     hdlr.setFormatter(SpecialFormatter())
@@ -112,9 +109,9 @@ def main():
     logging.info(f'Directory with structures: {os.path.abspath(args.mydirvariable)}')
     logging.info('Method, RMSD, std')
 
-    for method in method_list:
+    for method in methods:
         run_script(method, args, path, args.verbose_logfile, args.verbose)
-    work_with_result(path, method_list)
+    work_with_result(path, methods)
 
 
 if __name__ == '__main__':

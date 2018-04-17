@@ -2,11 +2,11 @@
 # make_experiment()
 # collect_result()
 
-import logging
-import pathlib
 import shutil
 import subprocess
 import sys
+import logging
+from saxs_experiment import LogPipe
 
 
 def prepare_data(all_files, tmpdir, method, verbose_logfile):
@@ -40,7 +40,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
         sys.exit(1)
 
 
-def collect_results(tmpdir):
+def collect_results(tmpdir, all_files):
     # Process with result from ensemble
     result_chi_and_weights_ensemble = []
     # 5000

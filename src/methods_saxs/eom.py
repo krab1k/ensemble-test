@@ -1,27 +1,18 @@
 # prepare_data()
 # make_experiment()
 # collect_result()
-import os
-import random
 import re
 import shutil
 import subprocess
 import sys
-import tempfile
-from argparse import ArgumentParser
-from os import listdir
-import numpy as np
 import fortranformat as ff
-import pathlib
 import logging
-from time import localtime, strftime
-from comparison import compare_ensembles
-import threading
-
+from saxs_experiment import LogPipe
 
 def prepare_data(all_files, tmpdir, method, verbose_logfile):
     for file in all_files:  # not strict format for pdbs file
         shutil.copy(file, f'{tmpdir}/pdbs/')
+        shutil.copy(file + '.dat', f'{tmpdir}/dats/')
 def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
     # Angular axis m01000.sax             Datafile m21000.sub         21-Jun-2001
     # .0162755E+00 0.644075E+03 0.293106E+02
@@ -66,7 +57,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
                     lineformat = ff.FortranRecordWriter('(1E14.6)')
                     b = lineformat.write([data1])
                     file1.write(f'{b}\n')
-    if verbose_logile:
+    if verbose_logfile:
         logpipe = LogPipe(logging.DEBUG)
         logpipe_err = LogPipe(logging.ERROR)
         p1 = subprocess.Popen(['yes'], stdout=subprocess.PIPE)
@@ -88,7 +79,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
         sys.exit(1)
 
 
-def collect_results(tmpdir):
+def collect_results(tmpdir, all_files):
     # process results from gajoe (/GAOO1/curve_1/
     chi2 = None
     structure_weight = []
@@ -105,6 +96,5 @@ def collect_results(tmpdir):
                 index = int(line.split()[1][:5]) - 1
                 weight = float(line.split()[4][1:6])
                 structure_weight.append((all_files[index], weight))
-    print(chi2, structure_weight)
     return [(chi2, structure_weight)]
     # ([chi2,[(structure, weight), (structure,weight), (structure, weight),... ], [chi2,(),...])

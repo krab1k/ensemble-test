@@ -2,17 +2,18 @@
 # make_experiment()
 # collect_result()
 import logging
-import pathlib
 import re
 import shutil
 import subprocess
 import sys
 from os import listdir
+from saxs_experiment import LogPipe
 
 
 def prepare_data(all_files, tmpdir, method, verbose_logfile):
     for file in all_files:  # not strict format for pdbs file
         shutil.copy(file, f'{tmpdir}/pdbs/')
+        shutil.copy(file + '.dat', f'{tmpdir}/dats/')
 
 
 def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
@@ -38,7 +39,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
         # Process with result from Multi_foxs
 
 
-def collect_results(tmpdir):
+def collect_results(tmpdir, all_files):
     multifoxs_files = []
     files = listdir(f'{tmpdir}/results/')
     for line in files:
