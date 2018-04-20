@@ -86,7 +86,7 @@ def work_with_result(path, method):
         logging.info('{} , {:.3f} , {:.3f}'.format(method, float(rmsd), float(std)))
 
 def get_saxs_methods():
-    return list(m.name for m in pkgutil.iter_modules(['/home/petra/Dokumenty/ensemble-test/src/methods_saxs']))
+    return list(m.name for m in pkgutil.iter_modules(['./methods_saxs']))
 
 def main():
     methods = get_saxs_methods()

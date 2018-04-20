@@ -56,12 +56,12 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
 
     if verbose_logfile:
         with open(f'{tmpdir}/method/result_mes', 'a') as file_mes:
-            call = subprocess.run(['/home/petra/Dokumenty/SAXS/mes/weights/mes', f'{tmpdir}/method/filelist'],
+            call = subprocess.run(['/usr/local/bin/mes', f'{tmpdir}/method/filelist'],
                                   cwd=f'{tmpdir}/method/',
                                   stdout=file_mes, stderr=logpipe_err)
     else:
         with open(f'{tmpdir}/method/result_mes', 'a') as file_mes:
-            call = subprocess.run(['/home/petra/Dokumenty/SAXS/mes/weights/mes', f'{tmpdir}/method/filelist'],
+            call = subprocess.run(['/usr/local/bin/mes', f'{tmpdir}/method/filelist'],
                                   cwd=f'{tmpdir}/method/',
                                   stdout=file_mes, stderr=subprocess.PIPE)
 

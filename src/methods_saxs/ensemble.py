@@ -6,10 +6,13 @@ import shutil
 import subprocess
 import sys
 import logging
-from saxs_experiment import LogPipe
+import pathlib
+from saxs_experiment import LogPipe, Colors
 
+ENSEMBLE_BINARY='/usr/local/bin/ensamble-fit'
 
 def prepare_data(all_files, tmpdir, method, verbose_logfile):
+    pathlib.Path(tmpdir + '/pdbs/ensembles').mkdir(parents=True, exist_ok=True)
     for i, f in enumerate(all_files, start=1):
         shutil.copy(f, f'{tmpdir}/pdbs/ensembles/{i:02d}.pdb')
 

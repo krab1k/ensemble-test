@@ -19,9 +19,6 @@ import importlib
 import subprocess
 import pathlib
 
-
-ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
-
 class Colors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -348,7 +345,8 @@ def main():
     final_statistic(all_runs, args.verbose)
 
 def get_saxs_methods():
-    return list(m.name for m in pkgutil.iter_modules(['/home/petra/Dokumenty/ensemble-test/src/methods_saxs']))
+    return list(m.name for m in pkgutil.iter_modules(['./methods_saxs']))
+
 
 if __name__ == '__main__':
     main()
