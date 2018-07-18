@@ -18,7 +18,10 @@ import pkgutil
 import importlib
 import subprocess
 import pathlib
+from multiprocessing import Pool
 
+
+#TODO paralel for python
 
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
 
@@ -192,14 +195,14 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
     print('\n')
     print('-------------------------------------------')
 
-def prepare_directory(all_files, tmpdir, method, verbose_logfile):
+def prepare_directory(tmpdir):
     pathlib.Path(tmpdir + '/pdbs').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/dats').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/method').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
     # prepare 'file'.dat and copy to /dats/
-    # logpipe = LogPipe(logging.INFO)
 
+def make_foxs(all_files, verbose_logfile):
     for file in all_files:
         if verbose_logfile:
             logpipe = LogPipe(logging.DEBUG)
@@ -216,6 +219,9 @@ def prepare_directory(all_files, tmpdir, method, verbose_logfile):
             print(f'ERROR: Foxs failed.', file=sys.stderr)
             logging.error(f'Foxs failed.')
             sys.exit(1)
+#TODO
+def make_crysol(all_files, verbose_logfile):
+    pass
 
 
 
@@ -321,7 +327,9 @@ def main():
         for file1, weight1 in files_and_weights:
             logging.info(f'#structure {file1} | weight {weight1:5.3f}')
         # copy to methods
-        prepare_directory(all_files, tmpdir, args.method, args.verbose_logfile)
+        prepare_directory(tmpdir)
+        with  Pool(os.cpu_count()) as pool:
+            pool.map(make_foxs, all_files, args.verbose_logfile)
         logging.info(f'\n==========================\n')
         make_curve_for_experiment(files_and_weights, tmpdir, args.experimentdata)
         if args.verbose == 3:
@@ -332,6 +340,8 @@ def main():
             print_parameters_verbose(args, list_pdb_file, all_files)
         run = Run(all_files, selected_files, weights, i + 1, args.method)
         m = importlib.import_module('methods_saxs.' + args.method)
+        print(args.method)
+        # TODO přes co iterovat
         m.prepare_data(all_files, tmpdir, args.method, args.verbose_logfile)
         m.make_experiment(all_files, tmpdir, args.verbose, args.verbose_logfile, args.method)
         result_chi_structure_weights = m.collect_results(tmpdir, all_files)

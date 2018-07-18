@@ -10,6 +10,7 @@ import pathlib
 import logging
 from time import localtime, strftime
 import pkgutil
+from multiprocessing import Pool
 
 class SpecialFormatter(logging.Formatter):
     FORMATS = {logging.DEBUG: logging._STYLES['{'][0]("DEBUG: {message}"),
@@ -108,7 +109,6 @@ def main():
     os.path.abspath(args.mydirvariable)
     logging.info(f'Directory with structures: {os.path.abspath(args.mydirvariable)}')
     logging.info('Method, RMSD, std')
-
     for method in methods:
         run_script(method, args, path, args.verbose_logfile, args.verbose)
     work_with_result(path, methods)

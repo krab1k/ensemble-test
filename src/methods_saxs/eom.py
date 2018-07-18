@@ -94,7 +94,7 @@ def collect_results(tmpdir, all_files):
             p = m.search(line)
             if p:
                 index = int(line.split()[1][:5]) - 1
-                weight = float(line.split()[4][1:6])
+                weight = float((line.split()[4][1:6]).strip('*'))
                 structure_weight.append((all_files[index], weight))
     return [(chi2, structure_weight)]
     # ([chi2,[(structure, weight), (structure,weight), (structure, weight),... ], [chi2,(),...])

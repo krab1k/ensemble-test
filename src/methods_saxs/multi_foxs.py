@@ -22,6 +22,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
     if verbose_logfile:
         logpipe = LogPipe(logging.DEBUG)
         logpipe_err = LogPipe(logging.DEBUG)
+        #doplnit cestu, chybí
         call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
                                *files_for_multifoxs], cwd=f'{tmpdir}/results/',
                               stdout=logpipe, stderr=logpipe_err)
