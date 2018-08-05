@@ -19,9 +19,8 @@ import importlib
 import subprocess
 import pathlib
 from multiprocessing import Pool
+from functools import partial
 
-
-#TODO paralel for python
 
 ENSEMBLE_BINARY = '/home/saxs/saxs-ensamble-fit/core/ensemble-fit'
 
@@ -141,7 +140,7 @@ def set_argument():
     parser.add_argument("--preserve", help="preserve temporary directory",
                         action="store_true")
 
-    parser.add_argument("--method", help="choose method ensamble, eom, foxs",
+    parser.add_argument("--method", help="choose method",
                         choices=get_saxs_methods(), required=True)
 
     parser.add_argument("--output", help="choose directory to save output",
@@ -151,6 +150,8 @@ def set_argument():
     parser.add_argument("--experimentdata", help="choose file for adderror",
                         metavar = "DIR", dest="experimentdata",required=True)
 
+    parser.add_argument("--makecurve", help="choose method to make a curve",
+                        choices=['foxs', 'crysol'], required=True)
 
     return parser.parse_args()
 
@@ -202,6 +203,9 @@ def prepare_directory(tmpdir):
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
     # prepare 'file'.dat and copy to /dats/
 
+def partial_foxs(all_files, verbose_logfile):
+    return()
+
 def make_foxs(all_files, verbose_logfile):
     for file in all_files:
         if verbose_logfile:
@@ -219,11 +223,40 @@ def make_foxs(all_files, verbose_logfile):
             print(f'ERROR: Foxs failed.', file=sys.stderr)
             logging.error(f'Foxs failed.')
             sys.exit(1)
+    for file in all_files+'.dat':
+        print(file)
+
 #TODO
 def make_crysol(all_files, verbose_logfile):
-    pass
-
-
+    #take an abinito's curve
+    for file in all_files:
+        if verbose_logfile:
+            logpipe = LogPipe(logging.DEBUG)
+            # fox sends stdout to stderr by default
+            logpipe_err = LogPipe(logging.DEBUG)
+            return_value = subprocess.run(['crysol', f'{file}'], stdout=logpipe,
+                                          stderr=logpipe_err)
+            logpipe.close()
+            logpipe_err.close()
+        else:
+            return_value = subprocess.run(['crysol', f'{file}'], stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE)
+        if return_value.returncode:
+            print(f'ERROR: CRYSOL failed.', file=sys.stderr)
+            logging.error(f'CRYSOL failed.')
+            sys.exit(1)
+    #crysol makes several curves, script takes  theoretical intensity in solution
+    #The first line is a title. Five columns contain: (1) experimental scattering vector in inverse angstroms,
+    # (2) theoretical intensity in solution, (3) in vacuo, (4) the solvent scattering
+    # and (5) the border layer scattering.
+    #crysol transforms mod01.pdb to mod01000.int
+        print(file)
+        new_name = file.split('.')[0] + '00.int'
+        print(new_name)
+        with open(new_name) as new_file, open(file.split('.')[0] + '.pdb.dat','w') as final_file:
+            for line in new_file:
+                final_file.write(line.split(' ')[2])
+    sys.exit(1)
 
 def make_curve_for_experiment(files_and_weights, tmpdir, experimentdata):
     files = [filename for filename, weight in files_and_weights]
@@ -283,8 +316,8 @@ def final_statistic(runs, verbose):
         print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
     logging.info('Best RMSD {:5.3f}, run {}'.format(min(rmsd), *indexes))
     logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd):5.3f}|{np.std(rmsd):5.3f}')
-
-def main():
+#predelat podle poznamek
+def run_method():
     methods = get_saxs_methods()
     random.seed(1)
     np.random.seed(1)
@@ -328,21 +361,25 @@ def main():
             logging.info(f'#structure {file1} | weight {weight1:5.3f}')
         # copy to methods
         prepare_directory(tmpdir)
-        with  Pool(os.cpu_count()) as pool:
-            pool.map(make_foxs, all_files, args.verbose_logfile)
-        logging.info(f'\n==========================\n')
-        make_curve_for_experiment(files_and_weights, tmpdir, args.experimentdata)
         if args.verbose == 3:
             print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
             print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
             print(args.method, '\n')
+        m = importlib.import_module('methods_saxs.' + args.method)
+        print(os.getcwd())
+        m.prepare_data(all_files, tmpdir, args.method, args.verbose_logfile)
+       # with  Pool(os.cpu_count()) as pool:
+       #     if args.makecurve=='foxs':
+       #         pool.map(make_foxs, all_files, args.verbose_logfile)
+       #     if args.makecurve=='crysol':
+        #        pool.map(make_crysol, all_files, args.verbose_logfile)
+        logging.info(f'\n==========================\n')
+        make_curve_for_experiment(files_and_weights, tmpdir, args.experimentdata)
+
         if args.verbose == 3:
             print_parameters_verbose(args, list_pdb_file, all_files)
         run = Run(all_files, selected_files, weights, i + 1, args.method)
-        m = importlib.import_module('methods_saxs.' + args.method)
         print(args.method)
-        # TODO přes co iterovat
-        m.prepare_data(all_files, tmpdir, args.method, args.verbose_logfile)
         m.make_experiment(all_files, tmpdir, args.verbose, args.verbose_logfile, args.method)
         result_chi_structure_weights = m.collect_results(tmpdir, all_files)
         run = process_result(args.tolerance, result_chi_structure_weights, run, tmpdir)
@@ -361,4 +398,4 @@ def get_saxs_methods():
     return list(m.name for m in pkgutil.iter_modules(['/home/petra/Dokumenty/ensemble-test/src/methods_saxs']))
 
 if __name__ == '__main__':
-    main()
+    run_method()

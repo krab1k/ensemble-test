@@ -11,6 +11,8 @@ import logging
 from time import localtime, strftime
 import pkgutil
 from multiprocessing import Pool
+import configparser
+from saxs_experiment import run_method
 
 class SpecialFormatter(logging.Formatter):
     FORMATS = {logging.DEBUG: logging._STYLES['{'][0]("DEBUG: {message}"),
@@ -70,6 +72,15 @@ def run_script(method, args, path, verbose_logfile, verbose):
         print(f'ERROR: run_script failed', file=sys.stderr)
         sys.exit(1)
 
+def check_binary():
+    print(os.getcwd() + '/config.ini')
+    if os.path.exists(os.getcwd() + '/config.ini'):
+        print('exist')
+        return True
+    else: print('Config file does not exist!')
+    return False
+
+
 
 def work_with_result(path, method):
     rmsd = []
@@ -86,11 +97,25 @@ def work_with_result(path, method):
     for method, rmsd, std in result_file:
         logging.info('{} , {:.3f} , {:.3f}'.format(method, float(rmsd), float(std)))
 
-def get_saxs_methods():
-    return list(m.name for m in pkgutil.iter_modules(['/home/petra/Dokumenty/ensemble-test/src/methods_saxs']))
+def get_saxs_methods(config):
+    return list(m.name for m in pkgutil.iter_modules([config['SOURCE_METHODS']['path']]))
 
 def main():
-    methods = get_saxs_methods()
+    config = configparser.ConfigParser()
+    config.read(os.getcwd() + '/config.ini')
+
+    if not check_binary():
+        sys.exit(1)
+    methods = get_saxs_methods(config)
+    #methods = config.sections()
+    for method in config.sections():
+        pass
+        #print(method)
+        #print(config[method]['value'])
+        #print(f'[\'{method}\'][\'value\']')
+        #a='[\'{method}\'][\'value\']'
+
+    print(methods)
     args = get_argument()
     datum = strftime("%Y-%m-%d__%H-%M-%S", localtime())
     path = f'{args.output}/results/result_{datum}'
