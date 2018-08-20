@@ -135,7 +135,8 @@ def main():
     logging.info(f'Directory with structures: {os.path.abspath(args.mydirvariable)}')
     logging.info('Method, RMSD, std')
     for method in methods:
-        run_script(method, args, path, args.verbose_logfile, args.verbose)
+        #run_script(method, args, path, args.verbose_logfile, args.verbose)
+        run_method(args)   
     work_with_result(path, methods)
 
 

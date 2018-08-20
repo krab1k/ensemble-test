@@ -25,7 +25,7 @@ def prepare_data(all_files, tmpdir, method, verbose_logfile):
             shutil.copy(file, f'{tmpdir}/method/')
 
     for file in all_files:  # not strict format for pdbs file
-        shutil.copy(file, f'{tmpdir}/pdbs/')
+        shutil.copy(file + '.pdb', f'{tmpdir}/pdbs/')
         shutil.copy(file + '.dat', f'{tmpdir}/dats/')
         shutil.copy(file + '.dat', f'{tmpdir}/method/')
 
@@ -81,8 +81,9 @@ def collect_results(tmpdir, all_files):
         for line in file_mes:
             if line.startswith('  best xi'):
                 chi2 = float(line.split(':')[1])
-            if re.search('\d.pdb.dat', line):
+            if re.search('\d.dat', line):
                 structure = line.split('.')[0].strip() + '.pdb'
+                print(structure)
                 weight = float(line.split(' ')[5].rstrip())
                 weight_strucutre.append((structure, weight))
         result.append((chi2, weight_strucutre))

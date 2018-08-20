@@ -6,19 +6,19 @@ import re
 import shutil
 import subprocess
 import sys
-from os import listdir
+import os
 from saxs_experiment import LogPipe
 
 
 def prepare_data(all_files, tmpdir, method, verbose_logfile):
     for file in all_files:  # not strict format for pdbs file
-        shutil.copy(file, f'{tmpdir}/pdbs/')
+        shutil.copy(file + '.pdb', f'{tmpdir}/pdbs/')
         shutil.copy(file + '.dat', f'{tmpdir}/dats/')
 
 
 def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
     # RUN Multi_foxs
-    files_for_multifoxs = [str(tmpdir + '/pdbs/' + file) for file in all_files]
+    files_for_multifoxs = [str(tmpdir + '/pdbs/' + file + '.pdb') for file in all_files]
     if verbose_logfile:
         logpipe = LogPipe(logging.DEBUG)
         logpipe_err = LogPipe(logging.DEBUG)
@@ -42,7 +42,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
 
 def collect_results(tmpdir, all_files):
     multifoxs_files = []
-    files = listdir(f'{tmpdir}/results/')
+    files = os.listdir(f'{tmpdir}/results/')
     for line in files:
         line = line.rstrip()
         if re.search('\d.txt$', line):

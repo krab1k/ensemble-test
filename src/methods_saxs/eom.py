@@ -11,7 +11,7 @@ from saxs_experiment import LogPipe
 
 def prepare_data(all_files, tmpdir, method, verbose_logfile):
     for file in all_files:  # not strict format for pdbs file
-        shutil.copy(file, f'{tmpdir}/pdbs/')
+        shutil.copy(file + '.pdb', f'{tmpdir}/pdbs/')
         shutil.copy(file + '.dat', f'{tmpdir}/dats/')
 def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
     # Angular axis m01000.sax             Datafile m21000.sub         21-Jun-2001
@@ -95,6 +95,6 @@ def collect_results(tmpdir, all_files):
             if p:
                 index = int(line.split()[1][:5]) - 1
                 weight = float((line.split()[4][1:6]).strip('*'))
-                structure_weight.append((all_files[index], weight))
+                structure_weight.append((all_files[index]+'.pdb', weight))
     return [(chi2, structure_weight)]
     # ([chi2,[(structure, weight), (structure,weight), (structure, weight),... ], [chi2,(),...])
