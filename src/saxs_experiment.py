@@ -291,14 +291,12 @@ def run_method(args, path, method):
         m.prepare_data(all_files, tmpdir, method, args.verbose_logfile, args.mydirvariable)
         logging.info(f'\n==========================\n')
         make_curve_for_experiment(files_and_weights, tmpdir, args.experimentdata, args.mydirvariable)
-
         if args.verbose == 3:
             print_parameters_verbose(args, list_pdb_file, all_files)
         run = Run(all_files, selected_files, weights, i + 1, method)
         m.make_experiment(all_files, tmpdir, args.verbose, args.verbose_logfile, method, path, args.mydirvariable)
         result_chi_structure_weights = m.collect_results(tmpdir, all_files)
         run = process_result(args.tolerance, result_chi_structure_weights, run, args.mydirvariable)
-        print('zmena',os.getcwd())
 
         all_runs.append(run)
 
@@ -317,8 +315,7 @@ def check_binary():
     return False
 
 def get_saxs_methods():
-    #TODO odstranit tvrdou cestu
-    return list(m.name for m in pkgutil.iter_modules(['/home/petra/Dokumenty/ensemble-test/src/methods_saxs']))
+    return list(m.name for m in pkgutil.iter_modules([config['SOURCE_METHODS']['path']]))
 
 if __name__ == '__main__':
     config = configparser.ConfigParser()
@@ -348,8 +345,13 @@ if __name__ == '__main__':
     logging.info(f'----------------------------------\n')
     if args.verbose == 3 or args.verbose == 2 or args.verbose == 1:
         print(f' \n EXPERIMENT  {strftime("%Y-%m-%d__%H-%M-%S", localtime())}')
-    if int(config[args.method]['value']) == 1:
-        path = config[args.method]['path']
-    else:
+
+    if int(config[args.method]['value']) == -1:
+        print('Wrong parametrs in config.int')
+        sys.exit(1)
+
+    if int(config[args.method]['value']) == 0:
         path = args.method
+    else:
+        path = config[args.method]['path']
     run_method(args, path, args.method)

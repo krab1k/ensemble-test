@@ -114,10 +114,10 @@ def get_saxs_methods(config):
 def main():
     config = configparser.ConfigParser()
     config.read(os.getcwd() + '/config.ini')
-
     if not check_binary():
         sys.exit(1)
     available_methods = get_saxs_methods(config)
+    print(available_methods)
     args = get_argument()
     datum = strftime("%Y-%m-%d__%H-%M-%S", localtime())
     path = f'{args.output}/results/result_{datum}'
@@ -146,7 +146,6 @@ def main():
             run_method(args, path_method, method)
         else:
             path_method = config[method]['path']
-            print(path)
             run_method(args, path_method, method)
 
     work_with_result(path, run_methods)

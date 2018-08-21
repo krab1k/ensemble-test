@@ -10,7 +10,7 @@ import subprocess
 import threading
 import glob
 from multiprocessing import Pool
-
+import configparser
 
 class LogPipe(threading.Thread):
 
@@ -70,16 +70,21 @@ def set_argument():
 
     return parser.parse_args()
 
-def check_binary(method):
+def run_method(method, config):
     if shutil.which(method):
         print(f'Selected method: {shutil.which(method)}')
-        return True
+        path = method
     else:
         print(f'{method} will run from configurations file {os.getcwd()} config.ini')
         if os.path.exists(os.getcwd() + '/config.ini'):
-            return True
+            path = config[method]['path']
         else: print(f'Config file does not exist!, the {method} can not run.')
-        return False
+        sys.exit(1)
+    if method=='foxs':
+        make_foxs(glob.glob(os.path.join(os.getcwd(), '*')), path)
+    if method == 'crysol':
+        make_crysol(glob.glob(os.path.join(os.getcwd(), '*')), path)
+
 
 def check_directory_pdb_files(mydirvariable, final_directory):
     if not os.path.exists(mydirvariable):
@@ -91,7 +96,7 @@ def check_directory_pdb_files(mydirvariable, final_directory):
         pass
         shutil.copy(f'{os.path.abspath(mydirvariable)}/{file}', final_directory)
 
-def make_foxs(all_files):
+def make_foxs(all_files, path):
     for file in all_files:
         """
         if verbose_logfile:
@@ -104,18 +109,20 @@ def make_foxs(all_files):
             logpipe_err.close()
         else:
         """
-
-        return_value = subprocess.run(['foxs', f'{file}'], stdout=subprocess.PIPE,
+        print(os.getcwd())
+        print(path, f'{file}')
+        return_value = subprocess.run([path, file], stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE)
-        if return_value.returncode:
-            print(f'ERROR: Foxs failed.', file=sys.stderr)
-            logging.error(f'Foxs failed.')
-            sys.exit(1)
+        print(return_value)
+        #if return_value.returncode:
+        #    print(f'ERROR: Foxs failed.', file=sys.stderr)
+        #    logging.error(f'Foxs failed.')
+        #    sys.exit(1)
     [os.rename(f, f.replace('.pdb.dat', '.dat')) for f in glob.glob(os.path.join(os.getcwd(), '*'))] #if not f.startswith('.')]
 
 
 #TODO
-def make_crysol(all_files):
+def make_crysol(all_files, path):
     #take an abinito's curve
     for file in all_files:
         """
@@ -129,7 +136,7 @@ def make_crysol(all_files):
             logpipe_err.close()
         else:
         """
-        return_value = subprocess.run(['crysol', f'{file}'], stdout=subprocess.PIPE,
+        return_value = subprocess.run([path, f'{file}'], stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE)
 
         if return_value.returncode:
@@ -161,6 +168,8 @@ def make_crysol(all_files):
 
 
 def main():
+    config = configparser.ConfigParser()
+    config.read(os.getcwd() + '/config.ini')
     tmpdir = tempfile.mkdtemp()
     args = set_argument()
     print('Source directory is:', os.path.abspath(args.mydirvariable))
@@ -183,11 +192,12 @@ def main():
    #          pool.map(make_foxs, glob.glob(os.path.join(os.getcwd(), '*')))
    #      if args.makecurve=='crysol':
    #         pool.map(make_crysol, glob.glob(os.path.join(os.getcwd(), '*')))
-    if args.makecurve=='foxs':
-        if check_binary(args.makecurve):
-            make_foxs(glob.glob(os.path.join(os.getcwd(), '*')))
-    if args.makecurve == 'crysol':
-        if check_binary(args.makecurve):
-            make_crysol(glob.glob(os.path.join(os.getcwd(), '*')))
+    run_method(args.makecurve, config)
+    #if args.makecurve=='foxs':
+    #    if check_binary(args.makecurve, config):
+    #        make_foxs(glob.glob(os.path.join(os.getcwd(), '*')))
+    #if args.makecurve == 'crysol':
+    #    if check_binary(args.makecurve, config):
+    #        make_crysol(glob.glob(os.path.join(os.getcwd(), '*')))
 if __name__ == '__main__':
     main()
