@@ -10,19 +10,18 @@ import os
 from saxs_experiment import LogPipe
 
 
-def prepare_data(all_files, tmpdir, method, verbose_logfile):
+def prepare_data(all_files, tmpdir, method, verbose_logfile, mydirvariable):
     for file in all_files:  # not strict format for pdbs file
-        shutil.copy(file + '.pdb', f'{tmpdir}/pdbs/')
-        shutil.copy(file + '.dat', f'{tmpdir}/dats/')
+        shutil.copy(f'{mydirvariable}/{file}.pdb', f'{tmpdir}/pdbs/')
+        shutil.copy(f'{mydirvariable}/{file}.dat', f'{tmpdir}/dats/')
 
 
-def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
+def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method, path, mydirvariable):
     # RUN Multi_foxs
     files_for_multifoxs = [str(tmpdir + '/pdbs/' + file + '.pdb') for file in all_files]
     if verbose_logfile:
         logpipe = LogPipe(logging.DEBUG)
         logpipe_err = LogPipe(logging.DEBUG)
-        #doplnit cestu, chybí
         call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
                                *files_for_multifoxs], cwd=f'{tmpdir}/results/',
                               stdout=logpipe, stderr=logpipe_err)
