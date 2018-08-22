@@ -6,32 +6,33 @@ import re
 import shutil
 import subprocess
 import sys
-from os import listdir
+import os
 from saxs_experiment import LogPipe
 
 
-def prepare_data(all_files, tmpdir, method, verbose_logfile):
+def prepare_data(all_files, tmpdir, method, verbose_logfile, mydirvariable):
     for file in all_files:  # not strict format for pdbs file
-        shutil.copy(file, f'{tmpdir}/pdbs/')
-        shutil.copy(file + '.dat', f'{tmpdir}/dats/')
+        shutil.copy(f'{mydirvariable}/{file}.pdb', f'{tmpdir}/pdbs/')
+        shutil.copy(f'{mydirvariable}/{file}.dat', f'{tmpdir}/dats/')
 
 
-def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
+def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method, path, mydirvariable):
     # RUN Multi_foxs
-    files_for_multifoxs = [str(tmpdir + '/pdbs/' + file) for file in all_files]
+    files_for_multifoxs = [str(tmpdir + '/pdbs/' + file + '.pdb') for file in all_files]
     if verbose_logfile:
         logpipe = LogPipe(logging.DEBUG)
         logpipe_err = LogPipe(logging.DEBUG)
-        call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
-                               *files_for_multifoxs], cwd=f'{tmpdir}/results/',
+        #call = subprocess.
+        call = subprocess.run([path, f'{tmpdir}/method/curve.modified.dat', *files_for_multifoxs
+                               ,], cwd=f'{tmpdir}/results/',
                               stdout=logpipe, stderr=logpipe_err)
         logpipe.close()
         logpipe_err.close()
     else:
-        call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
+        call = subprocess.run([path, f'{tmpdir}/method/curve.modified.dat',
                                *files_for_multifoxs], cwd=f'{tmpdir}/results/',
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if call.returncode:  # multifoxs don't get right returnvalue
+    if call.returncode:  # multifoxs doesn't get right returnvalue
         print(f'ERROR: multifoxs failed', file=sys.stderr)
         logging.error(f'Multifoxs failed.')
         sys.exit(1)
@@ -41,7 +42,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
 
 def collect_results(tmpdir, all_files):
     multifoxs_files = []
-    files = listdir(f'{tmpdir}/results/')
+    files = os.listdir(f'{tmpdir}/results/')
     for line in files:
         line = line.rstrip()
         if re.search('\d.txt$', line):

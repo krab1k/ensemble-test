@@ -8,12 +8,13 @@ import sys
 import fortranformat as ff
 import logging
 from saxs_experiment import LogPipe
+import os
 
-def prepare_data(all_files, tmpdir, method, verbose_logfile):
+def prepare_data(all_files, tmpdir, method, verbose_logfile, mydirvariable):
     for file in all_files:  # not strict format for pdbs file
-        shutil.copy(file, f'{tmpdir}/pdbs/')
-        shutil.copy(file + '.dat', f'{tmpdir}/dats/')
-def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
+        shutil.copy(f'{mydirvariable}/{file}.pdb', f'{tmpdir}/pdbs/')
+        shutil.copy(f'{mydirvariable}/{file}.dat', f'{tmpdir}/dats/')
+def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method, path, mydirvariable):
     # Angular axis m01000.sax             Datafile m21000.sub         21-Jun-2001
     # .0162755E+00 0.644075E+03 0.293106E+02
     with open(tmpdir + '/method/curve_gajoe.dat', 'w') as file_gajoe:
@@ -36,10 +37,10 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
     # ------
     #  Curve no.     1
     # 0.309279E+08
-    num_lines = sum(1 for line in open(all_files[0] + ".dat")) - 2
+    num_lines = sum(1 for line in open(mydirvariable + all_files[0] + ".dat")) - 2
     with open(tmpdir + '/method/juneom.eom', 'w') as file1:
         file1.write(f'    S values   {num_lines} \n')
-        with open(all_files[0] + ".dat") as file2:
+        with open(mydirvariable + all_files[0] + ".dat") as file2:
             for line in file2:
                 if line.startswith('#'):
                     continue
@@ -48,7 +49,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
                 b = lineformat.write([data])
                 file1.write(f'{b}\n')
         for i, filename in enumerate(all_files, start=1):
-            with open(filename + ".dat") as file2:
+            with open(mydirvariable + filename + ".dat") as file2:
                 file1.write(f'Curve no.     {i} \n')
                 for line in file2:
                     if line.startswith('#'):
@@ -61,7 +62,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
         logpipe = LogPipe(logging.DEBUG)
         logpipe_err = LogPipe(logging.ERROR)
         p1 = subprocess.Popen(['yes'], stdout=subprocess.PIPE)
-        call = subprocess.Popen(['gajoe', f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom',
+        call = subprocess.Popen([path, f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom',
                                  '-t=5'], cwd=f'{tmpdir}/results/', stdin=p1.stdout,
                                 stdout=logpipe, stderr=logpipe_err)
         call.communicate()
@@ -69,7 +70,7 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
         logpipe_err.close()
     else:
         p1 = subprocess.Popen(['yes'], stdout=subprocess.PIPE)
-        call = subprocess.Popen(['gajoe', f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom',
+        call = subprocess.Popen([path, f'{tmpdir}/method/curve_gajoe.dat', f'-i={tmpdir}/method/juneom.eom',
                                  '-t=5'], cwd=f'{tmpdir}/results/', stdin=p1.stdout,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         call.communicate()
@@ -94,7 +95,7 @@ def collect_results(tmpdir, all_files):
             p = m.search(line)
             if p:
                 index = int(line.split()[1][:5]) - 1
-                weight = float(line.split()[4][1:6])
-                structure_weight.append((all_files[index], weight))
+                weight = float((line.split()[4][1:6]).strip('*'))
+                structure_weight.append((all_files[index]+'.pdb', weight))
     return [(chi2, structure_weight)]
     # ([chi2,[(structure, weight), (structure,weight), (structure, weight),... ], [chi2,(),...])

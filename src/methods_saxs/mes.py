@@ -10,8 +10,7 @@ from os import listdir
 import logging
 from saxs_experiment import LogPipe
 
-
-def prepare_data(all_files, tmpdir, method, verbose_logfile):
+def prepare_data(all_files, tmpdir, method, verbose_logfile, mydirvariable):
     datas_files = []
     files = listdir(tmpdir + '/dats/')
     for line in files:
@@ -25,11 +24,11 @@ def prepare_data(all_files, tmpdir, method, verbose_logfile):
             shutil.copy(file, f'{tmpdir}/method/')
 
     for file in all_files:  # not strict format for pdbs file
-        shutil.copy(file, f'{tmpdir}/pdbs/')
-        shutil.copy(file + '.dat', f'{tmpdir}/dats/')
-        shutil.copy(file + '.dat', f'{tmpdir}/method/')
+        shutil.copy(f'{mydirvariable}/{file}.pdb', f'{tmpdir}/pdbs/')
+        shutil.copy(f'{mydirvariable}/{file}.dat', f'{tmpdir}/dats/')
+        shutil.copy(f'{mydirvariable}/{file}.dat', f'{tmpdir}/method/')
 
-def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
+def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method, path, mydirvariable):
     # Run MES
     logpipe = LogPipe(logging.DEBUG)
     logpipe_err = LogPipe(logging.DEBUG)
@@ -56,12 +55,12 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method):
 
     if verbose_logfile:
         with open(f'{tmpdir}/method/result_mes', 'a') as file_mes:
-            call = subprocess.run(['/usr/local/bin/mes', f'{tmpdir}/method/filelist'],
+            call = subprocess.run([path, f'{tmpdir}/method/filelist'],
                                   cwd=f'{tmpdir}/method/',
                                   stdout=file_mes, stderr=logpipe_err)
     else:
         with open(f'{tmpdir}/method/result_mes', 'a') as file_mes:
-            call = subprocess.run(['/usr/local/bin/mes', f'{tmpdir}/method/filelist'],
+            call = subprocess.run([path, f'{tmpdir}/method/filelist'],
                                   cwd=f'{tmpdir}/method/',
                                   stdout=file_mes, stderr=subprocess.PIPE)
 
@@ -81,7 +80,7 @@ def collect_results(tmpdir, all_files):
         for line in file_mes:
             if line.startswith('  best xi'):
                 chi2 = float(line.split(':')[1])
-            if re.search('\d.pdb.dat', line):
+            if re.search('\d.dat', line):
                 structure = line.split('.')[0].strip() + '.pdb'
                 weight = float(line.split(' ')[5].rstrip())
                 weight_strucutre.append((structure, weight))

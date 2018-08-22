@@ -16,8 +16,9 @@ from comparison import compare_ensembles
 import threading
 import pkgutil
 import importlib
-import subprocess
 import pathlib
+import configparser
+
 
 class Colors:
     HEADER = '\033[95m'
@@ -135,7 +136,7 @@ def set_argument():
     parser.add_argument("--preserve", help="preserve temporary directory",
                         action="store_true")
 
-    parser.add_argument("--method", help="choose method ensamble, eom, foxs",
+    parser.add_argument("--method", help="choose method",
                         choices=get_saxs_methods(), required=True)
 
     parser.add_argument("--output", help="choose directory to save output",
@@ -144,7 +145,6 @@ def set_argument():
 
     parser.add_argument("--experimentdata", help="choose file for adderror",
                         metavar = "DIR", dest="experimentdata",required=True)
-
 
     return parser.parse_args()
 
@@ -189,39 +189,20 @@ def print_parameters_verbose(args, list_pdb_file, all_files):
     print('\n')
     print('-------------------------------------------')
 
-def prepare_directory(all_files, tmpdir, method, verbose_logfile):
+def prepare_directory(tmpdir):
     pathlib.Path(tmpdir + '/pdbs').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/dats').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/method').mkdir(parents=True, exist_ok=True)
     pathlib.Path(tmpdir + '/results').mkdir(parents=True, exist_ok=True)
     # prepare 'file'.dat and copy to /dats/
-    # logpipe = LogPipe(logging.INFO)
-
-    for file in all_files:
-        if verbose_logfile:
-            logpipe = LogPipe(logging.DEBUG)
-            # fox sends stdout to stderr by default
-            logpipe_err = LogPipe(logging.DEBUG)
-            return_value = subprocess.run(['foxs', f'{file}'], stdout=logpipe,
-                                          stderr=logpipe_err)
-            logpipe.close()
-            logpipe_err.close()
-        else:
-            return_value = subprocess.run(['foxs', f'{file}'], stdout=subprocess.PIPE,
-                                          stderr=subprocess.PIPE)
-        if return_value.returncode:
-            print(f'ERROR: Foxs failed.', file=sys.stderr)
-            logging.error(f'Foxs failed.')
-            sys.exit(1)
 
 
-
-def make_curve_for_experiment(files_and_weights, tmpdir, experimentdata):
+def make_curve_for_experiment(files_and_weights, tmpdir, experimentdata, mydirvariable):
     files = [filename for filename, weight in files_and_weights]
     qs = np.linspace(0, 0.5, 501)
     curves = {}
     for filename in files:
-        with open(filename + '.dat') as file:
+        with open(mydirvariable + filename.split('.')[0] + '.dat') as file:
             data = []
             for line in file:
                 if line.startswith('#'):
@@ -241,7 +222,7 @@ def make_curve_for_experiment(files_and_weights, tmpdir, experimentdata):
     adderror(experimentdata, tmpdir + '/method/curve')
 
 
-def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
+def process_result(tolerance, result_chi_structure_weights, run, mydirvariable):
     minimum = min(chi2 for chi2, _ in result_chi_structure_weights)
     maximum = minimum * (1 + tolerance)
 
@@ -250,7 +231,8 @@ def process_result(tolerance, result_chi_structure_weights, run, tmpdir):
         result_files = [file for file, _ in names_and_weights]
         result_weights = [weight for _, weight in names_and_weights]
         if float(chi2) <= maximum:
-            weighted_rmsd = compare_ensembles(run.selected_files, result_files, run.weights, result_weights)
+            os.chdir(mydirvariable)
+            weighted_rmsd = compare_ensembles([mydirvariable + x + '.pdb' for x in run.selected_files], result_files, run.weights, result_weights)
             all_results.append((weighted_rmsd, chi2, names_and_weights))
     run.results = all_results
     return run
@@ -274,18 +256,78 @@ def final_statistic(runs, verbose):
         print('RMSD = {:.3f} ± {:.3f}'.format(np.mean(rmsd), np.std(rmsd)))
     logging.info('Best RMSD {:5.3f}, run {}'.format(min(rmsd), *indexes))
     logging.info(f'*****FINAL RMSD and STD| {np.mean(rmsd):5.3f}|{np.std(rmsd):5.3f}')
+#TODO predelat podle poznamek
 
-def main():
+def run_method(args, path, method):
+    all_runs = []
+    for i in range(args.repeat):
+        tmpdir = tempfile.mkdtemp()
+        logging.info(f'Task {i}')
+        logging.info(f'#Working directory: {tmpdir}')
+        list_pdb_file = find_pdb_file(args.mydirvariable)
+        if args.verbose ==  3 or args.verbose == 2:
+            print('====================================================')
+            print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat} \n' + Colors.ENDC, '\n')
+        all_files = [x.split('.')[0] for x in random.sample(list_pdb_file, args.n_files)]
+        # copy to pds
+        selected_files = random.sample(all_files, args.k_options)
+        # copy to dats
+        sample = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
+        weights = np.round(np.random.multinomial(1000, sample) / 1000, 3)
+        files_and_weights = list(zip(selected_files,weights))
+        logging.info(f'#Selected_files \n')
+        for file1, weight1 in files_and_weights:
+            logging.info(f'#structure {file1} | weight {weight1:5.3f}')
+        # copy to methods
+        prepare_directory(tmpdir)
+        if args.verbose == 3:
+            print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
+            print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
+            print(method, '\n')
+        m = importlib.import_module('methods_saxs.' + method)
+        m.prepare_data(all_files, tmpdir, method, args.verbose_logfile, args.mydirvariable)
+        logging.info(f'\n==========================\n')
+        make_curve_for_experiment(files_and_weights, tmpdir, args.experimentdata, args.mydirvariable)
+        if args.verbose == 3:
+            print_parameters_verbose(args, list_pdb_file, all_files)
+        run = Run(all_files, selected_files, weights, i + 1, method)
+        m.make_experiment(all_files, tmpdir, args.verbose, args.verbose_logfile, method, path, args.mydirvariable)
+        result_chi_structure_weights = m.collect_results(tmpdir, all_files)
+        run = process_result(args.tolerance, result_chi_structure_weights, run, args.mydirvariable)
+
+        all_runs.append(run)
+
+        if not args.preserve:
+            shutil.rmtree(tmpdir)
+
+        run.print_result(args)
+        logging.info(f'\n=============================\n')
+
+    final_statistic(all_runs, args.verbose)
+def check_binary():
+    if os.path.exists(os.getcwd() + '/config.ini'):
+        return True
+    else:
+        print('Config file does not exist!')
+    return False
+
+def get_saxs_methods():
+    return list(m.name for m in pkgutil.iter_modules([config['SOURCE_METHODS']['path']]))
+
+if __name__ == '__main__':
+    config = configparser.ConfigParser()
+    config.read(os.getcwd() + '/config.ini')
+
+    if not check_binary():
+        sys.exit(1)
     methods = get_saxs_methods()
     random.seed(1)
     np.random.seed(1)
     args = set_argument()
     os.chdir(args.mydirvariable)
-    list_pdb_file = find_pdb_file(args.mydirvariable)
-    test_argument(args, list_pdb_file)
-    result_chi_structure_weights = []
-    all_runs = []
-    hdlr = logging.FileHandler(f'{args.output}/result_{args.method}_n{args.n_files}_k{args.k_options}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
+    test_argument(args, find_pdb_file(args.mydirvariable))
+    hdlr = logging.FileHandler(
+        f'{args.output}/result_{args.method}_n{args.n_files}_k{args.k_options}_{strftime("%Y-%m-%d__%H-%M-%S", localtime())}.log')
     hdlr.setFormatter(SpecialFormatter())
     logging.root.addHandler(hdlr)
     logging.root.setLevel(logging.INFO)
@@ -300,53 +342,13 @@ def main():
     logging.info(f'----------------------------------\n')
     if args.verbose == 3 or args.verbose == 2 or args.verbose == 1:
         print(f' \n EXPERIMENT  {strftime("%Y-%m-%d__%H-%M-%S", localtime())}')
-    for i in range(args.repeat):
-        tmpdir = tempfile.mkdtemp()
-        logging.info(f'Task {i}')
-        logging.info(f'#Working directory: {tmpdir}')
-        if args.verbose ==  3 or args.verbose == 2:
-            print('====================================================')
-            print(Colors.OKGREEN + f'RUN {i+1}/{args.repeat} \n' + Colors.ENDC, '\n')
-        all_files = random.sample(list_pdb_file, args.n_files)
-        # copy to pds
-        selected_files = random.sample(all_files, args.k_options)
-        # copy to dats
-        sample = np.random.dirichlet(np.ones(args.k_options), size=1)[0]
-        weights = np.round(np.random.multinomial(1000, sample) / 1000, 3)
-        files_and_weights = list(zip(selected_files,weights))
-        logging.info(f'#Selected_files \n')
-        for file1, weight1 in files_and_weights:
-            logging.info(f'#structure {file1} | weight {weight1:5.3f}')
-        # copy to methods
-        prepare_directory(all_files, tmpdir, args.method, args.verbose_logfile)
-        logging.info(f'\n==========================\n')
-        make_curve_for_experiment(files_and_weights, tmpdir, args.experimentdata)
-        if args.verbose == 3:
-            print(Colors.OKBLUE + '\nCreated temporary directory \n' + Colors.ENDC, tmpdir, '\n')
-            print(Colors.OKBLUE + 'Method' + Colors.ENDC, '\n')
-            print(args.method, '\n')
-        if args.verbose == 3:
-            print_parameters_verbose(args, list_pdb_file, all_files)
-        run = Run(all_files, selected_files, weights, i + 1, args.method)
-        m = importlib.import_module('methods_saxs.' + args.method)
-        m.prepare_data(all_files, tmpdir, args.method, args.verbose_logfile)
-        m.make_experiment(all_files, tmpdir, args.verbose, args.verbose_logfile, args.method)
-        result_chi_structure_weights = m.collect_results(tmpdir, all_files)
-        run = process_result(args.tolerance, result_chi_structure_weights, run, tmpdir)
 
-        all_runs.append(run)
+    if int(config[args.method]['value']) == -1:
+        print('Wrong parametrs in config.int')
+        sys.exit(1)
 
-        if not args.preserve:
-            shutil.rmtree(tmpdir)
-
-        run.print_result(args)
-        logging.info(f'\n=============================\n')
-
-    final_statistic(all_runs, args.verbose)
-
-def get_saxs_methods():
-    return list(m.name for m in pkgutil.iter_modules(['./methods_saxs']))
-
-
-if __name__ == '__main__':
-    main()
+    if int(config[args.method]['value']) == 0:
+        path = args.method
+    else:
+        path = config[args.method]['path']
+    run_method(args, path, args.method)
