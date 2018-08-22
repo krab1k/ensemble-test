@@ -117,7 +117,6 @@ def main():
     if not check_binary():
         sys.exit(1)
     available_methods = get_saxs_methods(config)
-    print(available_methods)
     args = get_argument()
     datum = strftime("%Y-%m-%d__%H-%M-%S", localtime())
     path = f'{args.output}/results/result_{datum}'

@@ -82,7 +82,6 @@ def collect_results(tmpdir, all_files):
                 chi2 = float(line.split(':')[1])
             if re.search('\d.dat', line):
                 structure = line.split('.')[0].strip() + '.pdb'
-                print(structure)
                 weight = float(line.split(' ')[5].rstrip())
                 weight_strucutre.append((structure, weight))
         result.append((chi2, weight_strucutre))

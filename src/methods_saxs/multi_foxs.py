@@ -22,16 +22,17 @@ def make_experiment(all_files, tmpdir, verbose, verbose_logfile, method, path, m
     if verbose_logfile:
         logpipe = LogPipe(logging.DEBUG)
         logpipe_err = LogPipe(logging.DEBUG)
-        call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
-                               *files_for_multifoxs], cwd=f'{tmpdir}/results/',
+        #call = subprocess.
+        call = subprocess.run([path, f'{tmpdir}/method/curve.modified.dat', *files_for_multifoxs
+                               ,], cwd=f'{tmpdir}/results/',
                               stdout=logpipe, stderr=logpipe_err)
         logpipe.close()
         logpipe_err.close()
     else:
-        call = subprocess.run(['multi_foxs', f'{tmpdir}/method/curve.modified.dat',
+        call = subprocess.run([path, f'{tmpdir}/method/curve.modified.dat',
                                *files_for_multifoxs], cwd=f'{tmpdir}/results/',
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if call.returncode:  # multifoxs don't get right returnvalue
+    if call.returncode:  # multifoxs doesn't get right returnvalue
         print(f'ERROR: multifoxs failed', file=sys.stderr)
         logging.error(f'Multifoxs failed.')
         sys.exit(1)
